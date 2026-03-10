@@ -686,6 +686,10 @@ async function processFile() {
     const numPages = pdf.numPages, sheets = [], pageImages = [];
     let fullText = "";
 
+    const allTextRows = [];
+    let allTextContent = "";
+    const tableSheets = [];
+
     for (let i = 1; i <= numPages; i++) {
       processBtn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:10px"><span class="spinner"></span>Page ${i}/${numPages}...</span>`;
       const page = await pdf.getPage(i);
@@ -707,12 +711,29 @@ async function processFile() {
       fullText += lines.map(l => l.text).join("\n") + "\n\n";
 
       const { tables, textLines } = detectTableRegions(lines);
-      tables.forEach(t => { const sheet = buildTableSheet(lines, t.start, t.end, i); if (sheet) sheets.push(sheet); });
+      tables.forEach(t => { const sheet = buildTableSheet(lines, t.start, t.end, i); if (sheet) tableSheets.push(sheet); });
 
       const paragraphs = buildTextSections(textLines, bodyFont, i);
-      const textSheet = paragraphsToSheet(paragraphs, `Page ${i}`);
-      if (textSheet) sheets.push(textSheet);
+      if (paragraphs.length) {
+        // Add page separator for multi-page PDFs
+        if (allTextRows.length > 0 && numPages > 1) {
+          allTextRows.push(["", `--- Page ${i} ---`]);
+          allTextContent += "\n\n";
+        }
+        paragraphs.forEach(p => {
+          const prefix = p.isHeading ? "[H] " : "";
+          allTextRows.push([String(allTextRows.length + 1), prefix + p.text]);
+        });
+        allTextContent += paragraphs.map(p => p.text).join("\n\n");
+      }
     }
+
+    // Combine all text into a single "Content" sheet
+    if (allTextRows.length > 0) {
+      sheets.push({ name: "Content", type: "text", headers: ["#", "Content"], rows: allTextRows, textContent: allTextContent });
+    }
+    // Append any detected tables as additional sheets
+    tableSheets.forEach(t => sheets.push(t));
 
     if (sheets.length === 0 && fullText.trim()) {
       sheets.push({ name: "Content", type: "text", headers: ["Line", "Content"], rows: fullText.split("\n").filter(l => l.trim()).map((l, i) => [String(i + 1), l]), textContent: fullText });
