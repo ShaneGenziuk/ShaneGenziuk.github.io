@@ -147,6 +147,16 @@ const nlpReady = new Promise(resolve => {
   document.head.appendChild(s);
 });
 
+// SheetJS for proper .xlsx export
+let XLSX = null;
+const xlsxReady = new Promise(resolve => {
+  const s = document.createElement("script");
+  s.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+  s.onload = () => { XLSX = window.XLSX; resolve(); };
+  s.onerror = () => resolve();
+  document.head.appendChild(s);
+});
+
 // ============================================================
 // REDACTION CATEGORIES (4 groups, 33 items)
 // ============================================================
@@ -812,21 +822,32 @@ function handleExport() {
   let href, filename;
 
   if (state.exportFormat === "xlsx") {
-    let h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>`;
-    r.sheets.forEach(s => { h += `<x:ExcelWorksheet><x:Name>${s.name.substring(0, 31)}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>`; });
-    h += `</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>`;
+    if (!XLSX) { alert("Excel library failed to load. Please try again or use CSV."); return; }
+    const wb = XLSX.utils.book_new();
     r.sheets.forEach(s => {
-      h += `<div id="${s.name.substring(0, 31).replace(/[^a-zA-Z0-9_ ]/g, '')}">`;
-      h += `<table border="1">`;
-      if (s.headers) h += `<tr>${s.headers.map(hd => `<th style="background:#2d3436;color:#fff;font-weight:bold;padding:8px;font-family:Calibri">${hd}</th>`).join('')}</tr>`;
-      if (s.rows) s.rows.forEach((row, ri) => {
-        const bg = ri % 2 === 0 ? "#f8f9fa" : "#fff";
-        h += `<tr>${row.map(c => { const v = String(c ?? ""); const isR = v.includes("[REDACTED"); return `<td style="padding:6px;font-family:Calibri;background:${isR ? '#fff3cd' : bg};${isR ? 'color:#856404;font-weight:bold;' : ''}">${v}</td>`; }).join('')}</tr>`;
-      });
-      h += `</table></div>`;
+      const data = [];
+      if (s.headers) data.push(s.headers);
+      if (s.rows) s.rows.forEach(row => data.push(row.map(c => c ?? "")));
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      // Bold header row
+      if (s.headers) {
+        const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const addr = XLSX.utils.encode_cell({ r: 0, c });
+          if (ws[addr]) { if (!ws[addr].s) ws[addr].s = {}; ws[addr].s.font = { bold: true }; }
+        }
+        // Set column widths based on content
+        ws["!cols"] = s.headers.map((h, ci) => {
+          let max = String(h).length;
+          if (s.rows) s.rows.forEach(row => { const len = String(row[ci] ?? "").length; if (len > max) max = len; });
+          return { wch: Math.min(Math.max(max + 2, 10), 80) };
+        });
+      }
+      XLSX.utils.book_append_sheet(wb, ws, s.name.substring(0, 31));
     });
-    h += `</body></html>`;
-    href = `data:application/vnd.ms-excel;base64,${toBase64(h)}`; filename = `${r.title}.xls`;
+    const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "base64" });
+    href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${xlsxData}`;
+    filename = `${r.title}.xlsx`;
   } else if (state.exportFormat === "csv") {
     const csv = r.sheets.map(s => {
       const lines = [s.headers.map(escCSV).join(",")];
