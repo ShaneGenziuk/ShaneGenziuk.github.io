@@ -86,548 +86,766 @@ h1{font-size:32px;font-weight:300;letter-spacing:-.5px;color:#f0ecf8}
 <div class="wrap" id="app">
   <div class="header-wrap">
     <div class="header"><div class="logo">⬡</div><h1>PDF Converter</h1></div>
-    <p class="subtitle">Extract text & images, auto-redact sensitive data, export as Excel or editable document</p>
+    <p class="subtitle">Extract text &amp; images, auto-redact sensitive data, export as Excel or editable document</p>
     <p style="font-size:12px;color:#4ade80;margin-top:8px;font-family:'JetBrains Mono',monospace">✦ Runs entirely in your browser — no data leaves your device</p>
     <p style="font-size:11px;color:#6b6580;margin-top:4px;font-family:'JetBrains Mono',monospace" id="nlpStatus">Loading NLP engine...</p>
   </div>
   <div id="uploadPhase">
     <div class="dropzone" id="dropzone">
       <div style="font-size:48px;margin-bottom:16px;opacity:.6" id="dropIcon">📁</div>
-      <div id="dropHint"><p style="font-size:18px;color:#a09cb5">Drop your PDF here or click to browse</p><p style="font-size:14px;color:#5a5670;margin-top:6px">Supports any PDF with text, tables, or images</p></div>
-      <div id="dropFile" class="hidden"><p style="font-size:18px;color:#d8b4fe;font-weight:500" id="fileName"></p><p style="font-size:14px;color:#7a7590;margin-top:6px" id="fileSize"></p></div>
+      <div id="dropHint">
+        <p style="font-size:18px;color:#a09cb5">Drop your PDF here or click to browse</p>
+        <p style="font-size:14px;color:#5a5670;margin-top:6px">Supports any PDF with text, tables, or images</p>
+      </div>
+      <div id="dropFile" class="hidden">
+        <p style="font-size:18px;color:#d8b4fe;font-weight:500" id="fileName"></p>
+        <p style="font-size:14px;color:#7a7590;margin-top:6px" id="fileSize"></p>
+      </div>
     </div>
     <input type="file" id="fileInput" accept=".pdf" style="display:none">
     <div class="redact-toggle" id="redactToggle">
       <div class="toggle-track" id="toggleTrack"><div class="toggle-knob" id="toggleKnob"></div></div>
       <div style="flex:1">
         <p class="toggle-label" id="toggleLabel">🔒 Auto-Redact Sensitive Data</p>
-        <p style="font-size:13px;color:#6b6580;margin-top:2px">NLP + pattern-based redaction — detects names, places, organisations & data patterns</p>
+        <p style="font-size:13px;color:#6b6580;margin-top:2px">NLP + pattern-based redaction — detects names, places, organisations &amp; data patterns</p>
       </div>
       <span class="mono" style="font-size:12px;color:#a09060" id="activeCount"></span>
     </div>
     <div id="redactPanel" class="hidden"></div>
     <div id="errorMsg" class="error-msg hidden"></div>
-    <div style="text-align:center;margin-top:8px"><button class="glow-btn" id="processBtn" disabled>Extract & Convert</button></div>
+    <div style="text-align:center;margin-top:8px">
+      <button class="glow-btn" id="processBtn" disabled>Extract &amp; Convert</button>
+    </div>
   </div>
   <div id="resultsPhase" class="hidden"></div>
 </div>
 <script type="module">
+// ============================================================
+// PDF.JS SETUP
+// ============================================================
 import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
-pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
-let nlp=null;
-const nlpReady=new Promise(resolve=>{const s=document.createElement("script");s.src="https://unpkg.com/compromise@14.14.3/builds/compromise.min.js";s.onload=()=>{nlp=window.nlp;document.getElementById("nlpStatus").textContent="✓ NLP engine ready · Pattern matching · Context detection";document.getElementById("nlpStatus").style.color="#4ade80";resolve()};s.onerror=()=>{document.getElementById("nlpStatus").textContent="⚠ NLP unavailable — using pattern matching only";document.getElementById("nlpStatus").style.color="#fbbf24";resolve()};document.head.appendChild(s)});
-const REDACTION_GROUPS=[
-{id:"personal",label:"Personal Info",items:[
-{id:"dob",label:"Date of Birth",on:true,tag:"DOB",patterns:[/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/g,/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{2,4}\b/gi,/\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4}\b/gi],contextLabels:["date of birth","dob","d.o.b","birth date","birthdate","born"]},
-{id:"age",label:"Age",on:false,tag:"Age",patterns:[/\bage[d]?\s*:?\s*\d{1,3}\b/gi,/\b\d{1,3}\s*years?\s*old\b/gi],contextLabels:["age"]},
-{id:"email",label:"Email Address",on:true,tag:"Email",patterns:[/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g],contextLabels:["email","e-mail"]},
-{id:"financial_account",label:"Financial Account Number",on:true,tag:"Financial",patterns:[/\bBSB[\s:]*\d{3}[\s\-]?\d{3}\b/gi,/\bIBAN[\s:]*[A-Z]{2}\d{2}[\s]?[\dA-Z]{4,30}\b/gi,/(?:[$€£¥]|AU\$|NZ\$|US\$)\s*[\d,]+\.?\d*/g,/\b\d[\d,]+\.\d{2}\b/g],contextLabels:["account","account number","acc no","acc #","bsb","routing","sort code","iban","total","subtotal","sub-total","gst","tax","amount","balance","payment","price","cost","fee","charge","deposit","refund","invoice total","amount due","amount paid","net","gross"]},
-{id:"location",label:"Location",on:false,tag:"Location",patterns:[/\b\d{1,5}\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\s+(?:St|Street|Rd|Road|Ave|Avenue|Blvd|Boulevard|Dr|Drive|Ln|Lane|Ct|Court|Pl|Place|Way|Cres|Crescent|Tce|Terrace)\b/g,/\b(?:PO|P\.O\.)\s*Box\s*\d+\b/gi],contextLabels:["address","street","suburb","city","postcode","zip","state","location"],nlpExtract:doc=>doc.places().out("array")},
-{id:"medical_record",label:"Medical Record Number",on:true,tag:"Medical Record",patterns:[/\bMRN[\s:#]*[\w\-]+/gi,/\bpatient\s*(?:id|#|no|number)[\s:#]*[\w\-]+/gi,/\bUR[\s:#]*\d{4,}\b/gi],contextLabels:["mrn","medical record","patient id","patient number","ur number","health record"]},
-{id:"person_name",label:"Person Name",on:false,tag:"Name",patterns:[],contextLabels:["name","full name","first name","last name","surname","given name","family name","client","patient","employee","applicant","recipient","sender","attn","attention","contact","prepared by","approved by","signed by","authorised by","authorized by"],nlpExtract:doc=>doc.people().out("array")},
-{id:"gender",label:"Gender",on:false,tag:"Gender",patterns:[/\b(?:male|female|non[\s\-]?binary|transgender|gender[\s\-]?fluid)\b/gi],contextLabels:["gender","sex"]},
-{id:"ethnic_group",label:"Ethnic Group",on:false,tag:"Ethnicity",patterns:[],contextLabels:["ethnicity","ethnic group","race","nationality","cultural background","indigenous status"]},
-{id:"passport",label:"Passport",on:true,tag:"Passport",patterns:[/\bpassport[\s:#]*[A-Z]?\d{6,9}\b/gi],contextLabels:["passport","passport number","passport no"]},
-{id:"phone",label:"Phone Number",on:true,tag:"Phone",patterns:[/(?:\+?\d{1,3}[\s\-]?)?\(?\d{2,4}\)?[\s\-]?\d{3,4}[\s\-]?\d{3,4}\b/g,/\b04\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b/g,/\b1[38]00[\s\-]?\d{3}[\s\-]?\d{3}\b/g],contextLabels:["phone","mobile","cell","tel","telephone","fax","contact number","ph"]},
-{id:"vin",label:"Vehicle Identification Number",on:true,tag:"VIN",patterns:[/\b[A-HJ-NPR-Z0-9]{17}\b/g],contextLabels:["vin","vehicle identification","chassis"]},
-]},
-{id:"miscellaneous",label:"Miscellaneous",items:[
-{id:"advertising_id",label:"Advertising ID",on:false,tag:"Ad ID",patterns:[/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi],contextLabels:[]},
-{id:"domain_name",label:"Domain Name",on:false,tag:"Domain",patterns:[/\b(?:www\.)[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,})+\b/g,/\b[a-zA-Z0-9\-]+\.(?:com|org|net|gov|edu|com\.au|co\.nz|io|app)\b/g],contextLabels:["domain","website"]},
-{id:"iccid",label:"ICCID Number",on:false,tag:"ICCID",patterns:[/\b89\d{17,19}\b/g],contextLabels:["iccid"]},
-{id:"imsi",label:"IMSI ID",on:false,tag:"IMSI",patterns:[/\b\d{15}\b/g],contextLabels:["imsi"]},
-{id:"location_coords",label:"Location Coordinates",on:false,tag:"Coordinates",patterns:[/[\-]?\d{1,3}\.\d{4,},\s*[\-]?\d{1,3}\.\d{4,}/g],contextLabels:["coordinates","lat","lng","latitude","longitude","gps"]},
-{id:"url",label:"URL",on:false,tag:"URL",patterns:[/https?:\/\/[^\s<>"',)]+/gi],contextLabels:["url","link"]},
-{id:"swift_code",label:"Swift Code",on:false,tag:"Swift",patterns:[/\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b/g],contextLabels:["swift","bic"]},
-{id:"date",label:"Date",on:false,tag:"Date",patterns:[/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/g,/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{2,4}\b/gi,/\b\d{4}[\-\/]\d{2}[\-\/]\d{2}\b/g],contextLabels:["date"],nlpExtract:doc=>doc.dates().out("array")},
-{id:"storage_signed_policy",label:"Storage Signed Policy Document",on:false,tag:"Storage Policy",patterns:[/\bPolicy[\s]*=[\s]*[A-Za-z0-9+\/=]{20,}/g],contextLabels:[]},
-{id:"storage_signed_url",label:"Storage Signed URL",on:false,tag:"Signed URL",patterns:[/https?:\/\/[^\s]*(?:X-Goog-Signature|X-Amz-Signature|sig=|sv=|se=)[^\s]*/gi],contextLabels:[]},
-{id:"time",label:"Time",on:false,tag:"Time",patterns:[/\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?\b/g],contextLabels:["time"]},
-{id:"credit_card",label:"Credit Card Number",on:true,tag:"Card Number",patterns:[/\b4\d{3}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g,/\b5[1-5]\d{2}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g,/\b3[47]\d{2}[\s\-]?\d{6}[\s\-]?\d{5}\b/g,/\b6(?:011|5\d\d)[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g],contextLabels:["card number","credit card","debit card"]},
-{id:"credit_card_track",label:"Credit Card Track Number",on:true,tag:"Card Track",patterns:[/[%B]\d{13,19}\^[^\^]+\^\d{4}/g],contextLabels:[]},
-{id:"ssl_cert",label:"SSL Certificate",on:false,tag:"SSL Cert",patterns:[/-----BEGIN\s+(?:CERTIFICATE|RSA\s+PRIVATE\s+KEY|PRIVATE\s+KEY)-----[\s\S]*?-----END\s+(?:CERTIFICATE|RSA\s+PRIVATE\s+KEY|PRIVATE\s+KEY)-----/g],contextLabels:[]},
-{id:"tink_keyset",label:"Tink Keyset",on:false,tag:"Tink Key",patterns:[/"primaryKeyId"\s*:\s*\d+/g],contextLabels:[]},
-]},
-{id:"australia",label:"Australia",items:[
-{id:"au_drivers",label:"Australia Drivers License Number",on:true,tag:"AU License",patterns:[],contextLabels:["driver's licence","drivers licence","driver licence","license number","licence number","licence no"]},
-{id:"au_medicare",label:"Australia Medicare Number",on:true,tag:"AU Medicare",patterns:[/\b[2-6]\d{3}[\s]?\d{5}[\s]?\d(?:\/\d)?\b/g],contextLabels:["medicare","medicare number","medicare no","medicare card"]},
-{id:"au_passport",label:"Australia Passport",on:true,tag:"AU Passport",patterns:[/\b[A-Z]{1,2}\d{7}\b/g],contextLabels:["passport"]},
-{id:"au_tfn",label:"Australia Tax File Number",on:true,tag:"AU TFN",patterns:[/\bTFN[\s:]*\d{3}[\s\-]?\d{3}[\s\-]?\d{3}\b/gi,/\bABN[\s:]*\d{2}[\s]?\d{3}[\s]?\d{3}[\s]?\d{3}\b/gi,/\bACN[\s:]*\d{3}[\s]?\d{3}[\s]?\d{3}\b/gi],contextLabels:["tfn","tax file number","tax file no","abn","australian business number","acn"]},
-]},
-{id:"new_zealand",label:"New Zealand",items:[
-{id:"nz_ird",label:"New Zealand IRD Number",on:true,tag:"NZ IRD",patterns:[/\bIRD[\s:#]*\d{2,3}[\s\-]?\d{3}[\s\-]?\d{3}\b/gi],contextLabels:["ird","ird number","ird no","inland revenue"]},
-{id:"nz_nhi",label:"New Zealand NHI Number",on:true,tag:"NZ NHI",patterns:[/\b[A-Z]{3}\d{4}\b/g],contextLabels:["nhi","nhi number","national health index"]},
-]},
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+
+// ============================================================
+// NLP ENGINE (async load, app works without it)
+// ============================================================
+let nlp = null;
+const nlpReady = new Promise(resolve => {
+  const s = document.createElement("script");
+  s.src = "https://unpkg.com/compromise@14.14.3/builds/compromise.min.js";
+  s.onload = () => {
+    nlp = window.nlp;
+    document.getElementById("nlpStatus").textContent = "✓ NLP engine ready · Pattern matching · Context detection";
+    document.getElementById("nlpStatus").style.color = "#4ade80";
+    resolve();
+  };
+  s.onerror = () => {
+    document.getElementById("nlpStatus").textContent = "⚠ NLP unavailable — using pattern matching only";
+    document.getElementById("nlpStatus").style.color = "#fbbf24";
+    resolve();
+  };
+  document.head.appendChild(s);
+});
+
+// ============================================================
+// REDACTION CATEGORIES (4 groups, 33 items)
+// ============================================================
+const REDACTION_GROUPS = [
+  { id: "personal", label: "Personal Info", items: [
+    { id: "dob", label: "Date of Birth", on: true, tag: "DOB",
+      patterns: [/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/g, /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{2,4}\b/gi, /\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4}\b/gi],
+      contextLabels: ["date of birth","dob","d.o.b","birth date","birthdate","born"] },
+    { id: "age", label: "Age", on: false, tag: "Age",
+      patterns: [/\bage[d]?\s*:?\s*\d{1,3}\b/gi, /\b\d{1,3}\s*years?\s*old\b/gi],
+      contextLabels: ["age"] },
+    { id: "email", label: "Email Address", on: true, tag: "Email",
+      patterns: [/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g],
+      contextLabels: ["email","e-mail"] },
+    { id: "financial_account", label: "Financial Account Number", on: true, tag: "Financial",
+      patterns: [/\bBSB[\s:]*\d{3}[\s\-]?\d{3}\b/gi, /\bIBAN[\s:]*[A-Z]{2}\d{2}[\s]?[\dA-Z]{4,30}\b/gi, /(?:[$€£¥]|AU\$|NZ\$|US\$)\s*[\d,]+\.?\d*/g, /\b\d[\d,]+\.\d{2}\b/g],
+      contextLabels: ["account","account number","acc no","acc #","bsb","routing","sort code","iban","total","subtotal","sub-total","gst","tax","amount","balance","payment","price","cost","fee","charge","deposit","refund","invoice total","amount due","amount paid","net","gross"] },
+    { id: "location", label: "Location", on: false, tag: "Location",
+      patterns: [/\b\d{1,5}\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\s+(?:St|Street|Rd|Road|Ave|Avenue|Blvd|Boulevard|Dr|Drive|Ln|Lane|Ct|Court|Pl|Place|Way|Cres|Crescent|Tce|Terrace)\b/g, /\b(?:PO|P\.O\.)\s*Box\s*\d+\b/gi],
+      contextLabels: ["address","street","suburb","city","postcode","zip","state","location"],
+      nlpExtract: doc => doc.places().out("array") },
+    { id: "medical_record", label: "Medical Record Number", on: true, tag: "Medical Record",
+      patterns: [/\bMRN[\s:#]*[\w\-]+/gi, /\bpatient\s*(?:id|#|no|number)[\s:#]*[\w\-]+/gi, /\bUR[\s:#]*\d{4,}\b/gi],
+      contextLabels: ["mrn","medical record","patient id","patient number","ur number","health record"] },
+    { id: "person_name", label: "Person Name", on: false, tag: "Name",
+      patterns: [],
+      contextLabels: ["name","full name","first name","last name","surname","given name","family name","client","patient","employee","applicant","recipient","sender","attn","attention","contact","prepared by","approved by","signed by","authorised by","authorized by"],
+      nlpExtract: doc => doc.people().out("array") },
+    { id: "gender", label: "Gender", on: false, tag: "Gender",
+      patterns: [/\b(?:male|female|non[\s\-]?binary|transgender|gender[\s\-]?fluid)\b/gi],
+      contextLabels: ["gender","sex"] },
+    { id: "ethnic_group", label: "Ethnic Group", on: false, tag: "Ethnicity",
+      patterns: [],
+      contextLabels: ["ethnicity","ethnic group","race","nationality","cultural background","indigenous status"] },
+    { id: "passport", label: "Passport", on: true, tag: "Passport",
+      patterns: [/\bpassport[\s:#]*[A-Z]?\d{6,9}\b/gi],
+      contextLabels: ["passport","passport number","passport no"] },
+    { id: "phone", label: "Phone Number", on: true, tag: "Phone",
+      patterns: [/(?:\+?\d{1,3}[\s\-]?)?\(?\d{2,4}\)?[\s\-]?\d{3,4}[\s\-]?\d{3,4}\b/g, /\b04\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b/g, /\b1[38]00[\s\-]?\d{3}[\s\-]?\d{3}\b/g],
+      contextLabels: ["phone","mobile","cell","tel","telephone","fax","contact number","ph"] },
+    { id: "vin", label: "Vehicle Identification Number", on: true, tag: "VIN",
+      patterns: [/\b[A-HJ-NPR-Z0-9]{17}\b/g],
+      contextLabels: ["vin","vehicle identification","chassis"] },
+  ]},
+  { id: "miscellaneous", label: "Miscellaneous", items: [
+    { id: "advertising_id", label: "Advertising ID", on: false, tag: "Ad ID",
+      patterns: [/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi],
+      contextLabels: [] },
+    { id: "domain_name", label: "Domain Name", on: false, tag: "Domain",
+      patterns: [/\b(?:www\.)[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,})+\b/g, /\b[a-zA-Z0-9\-]+\.(?:com|org|net|gov|edu|com\.au|co\.nz|io|app)\b/g],
+      contextLabels: ["domain","website"] },
+    { id: "iccid", label: "ICCID Number", on: false, tag: "ICCID",
+      patterns: [/\b89\d{17,19}\b/g],
+      contextLabels: ["iccid"] },
+    { id: "imsi", label: "IMSI ID", on: false, tag: "IMSI",
+      patterns: [/\b\d{15}\b/g],
+      contextLabels: ["imsi"] },
+    { id: "location_coords", label: "Location Coordinates", on: false, tag: "Coordinates",
+      patterns: [/[\-]?\d{1,3}\.\d{4,},\s*[\-]?\d{1,3}\.\d{4,}/g],
+      contextLabels: ["coordinates","lat","lng","latitude","longitude","gps"] },
+    { id: "url", label: "URL", on: false, tag: "URL",
+      patterns: [/https?:\/\/[^\s<>"',)]+/gi],
+      contextLabels: ["url","link"] },
+    { id: "swift_code", label: "Swift Code", on: false, tag: "Swift",
+      patterns: [/\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b/g],
+      contextLabels: ["swift","bic"] },
+    { id: "date", label: "Date", on: false, tag: "Date",
+      patterns: [/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/g, /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{2,4}\b/gi, /\b\d{4}[\-\/]\d{2}[\-\/]\d{2}\b/g],
+      contextLabels: ["date"],
+      nlpExtract: doc => doc.dates().out("array") },
+    { id: "storage_signed_policy", label: "Storage Signed Policy Document", on: false, tag: "Storage Policy",
+      patterns: [/\bPolicy[\s]*=[\s]*[A-Za-z0-9+\/=]{20,}/g],
+      contextLabels: [] },
+    { id: "storage_signed_url", label: "Storage Signed URL", on: false, tag: "Signed URL",
+      patterns: [/https?:\/\/[^\s]*(?:X-Goog-Signature|X-Amz-Signature|sig=|sv=|se=)[^\s]*/gi],
+      contextLabels: [] },
+    { id: "time", label: "Time", on: false, tag: "Time",
+      patterns: [/\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?\b/g],
+      contextLabels: ["time"] },
+    { id: "credit_card", label: "Credit Card Number", on: true, tag: "Card Number",
+      patterns: [/\b4\d{3}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g, /\b5[1-5]\d{2}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g, /\b3[47]\d{2}[\s\-]?\d{6}[\s\-]?\d{5}\b/g, /\b6(?:011|5\d\d)[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g],
+      contextLabels: ["card number","credit card","debit card"] },
+    { id: "credit_card_track", label: "Credit Card Track Number", on: true, tag: "Card Track",
+      patterns: [/[%B]\d{13,19}\^[^\^]+\^\d{4}/g],
+      contextLabels: [] },
+    { id: "ssl_cert", label: "SSL Certificate", on: false, tag: "SSL Cert",
+      patterns: [/-----BEGIN\s+(?:CERTIFICATE|RSA\s+PRIVATE\s+KEY|PRIVATE\s+KEY)-----[\s\S]*?-----END\s+(?:CERTIFICATE|RSA\s+PRIVATE\s+KEY|PRIVATE\s+KEY)-----/g],
+      contextLabels: [] },
+    { id: "tink_keyset", label: "Tink Keyset", on: false, tag: "Tink Key",
+      patterns: [/"primaryKeyId"\s*:\s*\d+/g],
+      contextLabels: [] },
+  ]},
+  { id: "australia", label: "Australia", items: [
+    { id: "au_drivers", label: "Australia Drivers License Number", on: true, tag: "AU License",
+      patterns: [],
+      contextLabels: ["driver's licence","drivers licence","driver licence","license number","licence number","licence no"] },
+    { id: "au_medicare", label: "Australia Medicare Number", on: true, tag: "AU Medicare",
+      patterns: [/\b[2-6]\d{3}[\s]?\d{5}[\s]?\d(?:\/\d)?\b/g],
+      contextLabels: ["medicare","medicare number","medicare no","medicare card"] },
+    { id: "au_passport", label: "Australia Passport", on: true, tag: "AU Passport",
+      patterns: [/\b[A-Z]{1,2}\d{7}\b/g],
+      contextLabels: ["passport"] },
+    { id: "au_tfn", label: "Australia Tax File Number", on: true, tag: "AU TFN",
+      patterns: [/\bTFN[\s:]*\d{3}[\s\-]?\d{3}[\s\-]?\d{3}\b/gi, /\bABN[\s:]*\d{2}[\s]?\d{3}[\s]?\d{3}[\s]?\d{3}\b/gi, /\bACN[\s:]*\d{3}[\s]?\d{3}[\s]?\d{3}\b/gi],
+      contextLabels: ["tfn","tax file number","tax file no","abn","australian business number","acn"] },
+  ]},
+  { id: "new_zealand", label: "New Zealand", items: [
+    { id: "nz_ird", label: "New Zealand IRD Number", on: true, tag: "NZ IRD",
+      patterns: [/\bIRD[\s:#]*\d{2,3}[\s\-]?\d{3}[\s\-]?\d{3}\b/gi],
+      contextLabels: ["ird","ird number","ird no","inland revenue"] },
+    { id: "nz_nhi", label: "New Zealand NHI Number", on: true, tag: "NZ NHI",
+      patterns: [/\b[A-Z]{3}\d{4}\b/g],
+      contextLabels: ["nhi","nhi number","national health index"] },
+  ]},
 ];
-let state={file:null,fileData:null,redactEnabled:false,redactState:{},customKeywords:"",result:null,exportFormat:"xlsx"};
-REDACTION_GROUPS.forEach(g=>g.items.forEach(item=>{state.redactState[item.id]=item.on}));
-const $=sel=>document.querySelector(sel);
-const dropzone=$("#dropzone"),fileInput=$("#fileInput"),processBtn=$("#processBtn"),redactToggle=$("#redactToggle"),redactPanel=$("#redactPanel"),uploadPhase=$("#uploadPhase"),resultsPhase=$("#resultsPhase");
-dropzone.addEventListener("click",()=>fileInput.click());
-dropzone.addEventListener("dragover",e=>{e.preventDefault();dropzone.classList.add("over")});
-dropzone.addEventListener("dragleave",()=>dropzone.classList.remove("over"));
-dropzone.addEventListener("drop",e=>{e.preventDefault();dropzone.classList.remove("over");handleFile(e.dataTransfer.files[0])});
-fileInput.addEventListener("change",e=>handleFile(e.target.files[0]));
-function handleFile(f){
-if(!f||f.type!=="application/pdf"){showError("Please upload a PDF file.");return}
-state.file=f;state.result=null;hideError();
-$("#dropIcon").textContent="📄";$("#dropHint").classList.add("hidden");$("#dropFile").classList.remove("hidden");
-$("#fileName").textContent=f.name;$("#fileSize").textContent=`${(f.size/1024).toFixed(1)} KB — Click to change`;
-processBtn.disabled=false;
-const reader=new FileReader();reader.onload=()=>{state.fileData=reader.result};reader.readAsArrayBuffer(f);
-}
-redactToggle.addEventListener("click",()=>{state.redactEnabled=!state.redactEnabled;renderRedactToggle()});
-function renderRedactToggle(){
-const on=state.redactEnabled;
-redactToggle.classList.toggle("on",on);$("#toggleTrack").classList.toggle("on",on);
-$("#toggleKnob").classList.toggle("on",on);$("#toggleLabel").classList.toggle("on",on);
-redactPanel.classList.toggle("hidden",!on);updateActiveCount();updateProcessBtn();
-}
-function updateActiveCount(){const c=Object.values(state.redactState).filter(Boolean).length;$("#activeCount").textContent=state.redactEnabled?`${c} active`:"";}
-function updateProcessBtn(){const c=Object.values(state.redactState).filter(Boolean).length;processBtn.textContent=state.redactEnabled&&c>0?`Extract & Redact (${c} rules)`:"Extract & Convert";}
-function buildRedactPanel(){
-let html="";
-REDACTION_GROUPS.forEach(group=>{
-const onCount=group.items.filter(i=>state.redactState[i.id]).length;
-const gs=onCount===0?"none":onCount===group.items.length?"all":"some";
-html+=`<div class="group-box" data-group="${group.id}"><div class="group-header"><div style="display:flex;align-items:center;gap:10px" data-collapse="${group.id}"><span class="group-arrow" id="arrow-${group.id}">▾</span><span class="group-title">${group.label}</span><span class="group-count" id="gcount-${group.id}">${onCount}/${group.items.length}</span></div><button class="sel-all ${gs}" data-selall="${group.id}" id="selall-${group.id}"><span class="chk ${gs==='all'?'on':''}" id="selchk-${group.id}" ${gs==='some'?'style="border-color:#a855f7;background:rgba(168,85,247,.4)"':''}>${gs==='all'?'✓':gs==='some'?'–':''}</span>Select all</button></div><div class="group-items" id="gitems-${group.id}">`;
-group.items.forEach(item=>{
-const m=[];
-if(item.nlpExtract)m.push('<span class="method-tag method-nlp">NLP</span>');
-if(item.contextLabels&&item.contextLabels.length)m.push('<span class="method-tag method-ctx">CTX</span>');
-if(item.patterns&&item.patterns.length)m.push('<span class="method-tag method-rgx">RGX</span>');
-html+=`<div class="item-chip ${state.redactState[item.id]?'on':''}" data-item="${item.id}"><div class="chk ${state.redactState[item.id]?'on':''}" id="ichk-${item.id}">${state.redactState[item.id]?'✓':''}</div><span class="label">${item.label} ${m.join('')}</span></div>`;
-});
-html+=`</div></div>`;
-});
-html+=`<div class="group-box"><div class="group-header" data-item="custom_kw_toggle"><div style="display:flex;align-items:center;gap:10px"><div class="chk" id="ichk-custom_kw"></div><span class="group-title">Custom Keywords</span></div><span class="mono" style="font-size:11px;color:#6b6580">Your own terms</span></div><div id="customKwBox" class="hidden" style="padding:4px 16px 14px"><input type="text" id="customKwInput" value="" placeholder="Enter keywords separated by commas" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(251,191,36,.2);background:rgba(0,0,0,.3);color:#e8e6f0;font-family:'JetBrains Mono',monospace;font-size:12px;outline:none"></div></div>`;
-html+=`<div style="display:flex;gap:12px;padding:8px 4px;flex-wrap:wrap;align-items:center"><span style="font-size:11px;color:#6b6580">Detection:</span><span class="method-tag method-nlp">NLP</span><span style="font-size:11px;color:#6b6580">Language</span><span class="method-tag method-ctx">CTX</span><span style="font-size:11px;color:#6b6580">Labels</span><span class="method-tag method-rgx">RGX</span><span style="font-size:11px;color:#6b6580">Patterns</span></div>`;
-redactPanel.innerHTML=html;
-redactPanel.addEventListener("click",e=>{
-const itemEl=e.target.closest("[data-item]"),collapseEl=e.target.closest("[data-collapse]"),selAllEl=e.target.closest("[data-selall]");
-if(e.target.closest("[data-item='custom_kw_toggle']")){$("#customKwBox").classList.toggle("hidden");return}
-if(selAllEl){e.stopPropagation();const gid=selAllEl.dataset.selall,group=REDACTION_GROUPS.find(g=>g.id===gid),allOn=group.items.every(i=>state.redactState[i.id]);group.items.forEach(i=>{state.redactState[i.id]=!allOn});refreshGroupUI(gid);updateActiveCount();updateProcessBtn();return}
-if(collapseEl){const gid=collapseEl.dataset.collapse;$(`#gitems-${gid}`).classList.toggle("hidden");$(`#arrow-${gid}`).classList.toggle("collapsed");return}
-if(itemEl&&itemEl.dataset.item){const id=itemEl.dataset.item;state.redactState[id]=!state.redactState[id];const chk=$(`#ichk-${id}`);if(chk){chk.classList.toggle("on");chk.textContent=state.redactState[id]?"✓":""}itemEl.classList.toggle("on");const group=REDACTION_GROUPS.find(g=>g.items.some(i=>i.id===id));if(group)refreshGroupUI(group.id);updateActiveCount();updateProcessBtn()}
-});
-const kwInput=$("#customKwInput");if(kwInput)kwInput.addEventListener("input",e=>{state.customKeywords=e.target.value});
-}
-function refreshGroupUI(gid){
-const group=REDACTION_GROUPS.find(g=>g.id===gid),onCount=group.items.filter(i=>state.redactState[i.id]).length;
-const gs=onCount===0?"none":onCount===group.items.length?"all":"some";
-$(`#gcount-${gid}`).textContent=`${onCount}/${group.items.length}`;
-const selBtn=$(`#selall-${gid}`);selBtn.className=`sel-all ${gs}`;
-const selChk=$(`#selchk-${gid}`);selChk.className=`chk ${gs==='all'?'on':''}`;
-selChk.style=gs==='some'?'border-color:#a855f7;background:rgba(168,85,247,.4)':'';
-selChk.textContent=gs==='all'?'✓':gs==='some'?'–':'';
-group.items.forEach(item=>{const chip=redactPanel.querySelector(`[data-item="${item.id}"]`);if(chip){chip.classList.toggle("on",state.redactState[item.id]);const chk=$(`#ichk-${item.id}`);if(chk){chk.classList.toggle("on",state.redactState[item.id]);chk.textContent=state.redactState[item.id]?"✓":""}}});
-}
-buildRedactPanel();
-function applyRedactions(fullText,sheets){
-const stats={total_redactions:0,by_category:{}};
-const activeItems=[];
-REDACTION_GROUPS.forEach(g=>g.items.forEach(item=>{if(state.redactState[item.id])activeItems.push(item)}));
-if(state.customKeywords.trim()){state.customKeywords.split(",").map(k=>k.trim()).filter(Boolean).forEach(kw=>{activeItems.push({id:"custom_"+kw,tag:"Custom",patterns:[new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi')],contextLabels:[],nlpExtract:null})})}
-const nlpEntities={};
-if(nlp){const doc=nlp(fullText);activeItems.forEach(item=>{if(item.nlpExtract){const found=item.nlpExtract(doc);if(found&&found.length>0){if(!nlpEntities[item.tag])nlpEntities[item.tag]=new Set();found.forEach(s=>{const t=s.trim();if(t.length>=2)nlpEntities[item.tag].add(t)})}}})}
-const nlpPatterns=[];
-Object.entries(nlpEntities).forEach(([tag,strings])=>{strings.forEach(s=>{nlpPatterns.push({pattern:new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'),tag})})});
-const contextPatterns=[];
-activeItems.forEach(item=>{if(item.contextLabels&&item.contextLabels.length>0){const lg=item.contextLabels.map(l=>l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join("|");contextPatterns.push({pattern:new RegExp(`(?:${lg})\\s*[:=]?\\s*([^\\n,;]{2,50})`,'gi'),tag:item.tag,cg:1})}});
-function redactStr(str){
-let result=str;
-activeItems.forEach(item=>{if(!item.patterns)return;item.patterns.forEach(pattern=>{const re=new RegExp(pattern.source,pattern.flags);let match;while((match=re.exec(result))!==null){const before=result.substring(Math.max(0,match.index-12),match.index);if(before.includes("[REDACTED"))continue;const replacement=`[REDACTED - ${item.tag}]`;result=result.substring(0,match.index)+replacement+result.substring(match.index+match[0].length);re.lastIndex=match.index+replacement.length;stats.total_redactions++;stats.by_category[item.tag]=(stats.by_category[item.tag]||0)+1}})});
-nlpPatterns.forEach(({pattern,tag})=>{const re=new RegExp(pattern.source,pattern.flags);let match;while((match=re.exec(result))!==null){const before=result.substring(Math.max(0,match.index-12),match.index);if(before.includes("[REDACTED"))continue;const replacement=`[REDACTED - ${tag}]`;result=result.substring(0,match.index)+replacement+result.substring(match.index+match[0].length);re.lastIndex=match.index+replacement.length;stats.total_redactions++;stats.by_category[tag]=(stats.by_category[tag]||0)+1}});
-contextPatterns.forEach(({pattern,tag,cg})=>{const re=new RegExp(pattern.source,pattern.flags);let match;while((match=re.exec(result))!==null){const value=match[cg]?.trim();if(!value||value.length<2||value.includes("[REDACTED"))continue;const valueStart=match.index+match[0].indexOf(value);const beforeVal=result.substring(Math.max(0,valueStart-12),valueStart);if(beforeVal.includes("[REDACTED"))continue;const replacement=match[0].replace(value,`[REDACTED - ${tag}]`);result=result.substring(0,match.index)+replacement+result.substring(match.index+match[0].length);re.lastIndex=match.index+replacement.length;stats.total_redactions++;stats.by_category[tag]=(stats.by_category[tag]||0)+1}});
-return result}
-sheets.forEach(sheet=>{if(sheet.rows)sheet.rows=sheet.rows.map(row=>row.map(cell=>redactStr(cell)));if(sheet.headers)sheet.headers=sheet.headers.map(h=>redactStr(h));if(sheet.textContent)sheet.textContent=redactStr(sheet.textContent)});
-return stats}
-processBtn.addEventListener("click",processFile);
+
 // ============================================================
-// SMART EXTRACTION ENGINE
+// STATE
 // ============================================================
-
-// Get font size from pdf.js transform matrix
-function getFontSize(item){return Math.abs(item.transform[0])||Math.abs(item.transform[3])||item.height||10}
-
-// Cluster values with a tolerance (for column detection)
-function clusterValues(values,tolerance){
-if(!values.length)return[];
-const sorted=[...values].sort((a,b)=>a-b);
-const clusters=[[sorted[0]]];
-for(let i=1;i<sorted.length;i++){
-if(sorted[i]-sorted[i-1]<=tolerance)clusters[clusters.length-1].push(sorted[i]);
-else clusters.push([sorted[i]]);
-}
-return clusters.map(c=>({center:c.reduce((a,b)=>a+b,0)/c.length,count:c.length,min:c[0],max:c[c.length-1]}));
-}
-
-// Bullet/marker characters to strip and merge with adjacent text
-const BULLET_RE=/^[\u2022\u2023\u25E6\u2043\u2219\u25CF\u25CB\u25AA\u25AB\u2013\u2014•·∙○●◦►▸‣\-–—]\s*$/;
-const BULLET_PREFIX_RE=/^[\u2022\u2023\u25E6\u2043\u2219\u25CF\u25CB\u25AA\u25AB\u2013\u2014•·∙○●◦►▸‣\-–—]\s+/;
-const SUB_BULLET_RE=/^[o]\s*$/;
-
-// Build structured lines from raw text items
-function buildLines(items){
-const yTolerance=3;
-const sorted=[...items].filter(it=>it.str.trim()).sort((a,b)=>b.transform[5]-a.transform[5]||a.transform[4]-b.transform[4]);
-const lines=[];
-let currentLine=null;
-sorted.forEach(item=>{
-const y=item.transform[5], x=item.transform[4];
-const fontSize=getFontSize(item);
-if(!currentLine||Math.abs(y-currentLine.y)>yTolerance){
-currentLine={y,items:[],fontSize:0};lines.push(currentLine);
-}
-currentLine.items.push({str:item.str,x,width:item.width||0,fontSize,fontName:item.fontName||""});
-currentLine.fontSize=Math.max(currentLine.fontSize,fontSize);
-});
-
-// Sort items within each line, merge adjacent fragments, and handle bullets
-lines.forEach(line=>{
-line.items.sort((a,b)=>a.x-b.x);
-
-// First pass: merge bullet markers into the next text item
-const debulleted=[];
-for(let i=0;i<line.items.length;i++){
-const item=line.items[i];
-const isBullet=BULLET_RE.test(item.str.trim())||SUB_BULLET_RE.test(item.str.trim());
-if(isBullet&&i+1<line.items.length){
-// Skip the bullet, the next item is the real content
-continue;
-}
-// Strip bullet prefix from text items
-const cleaned={...item};
-cleaned.str=cleaned.str.replace(BULLET_PREFIX_RE,"");
-debulleted.push(cleaned);
-}
-
-// Second pass: merge fragments that are close together
-const merged=[];
-debulleted.forEach(item=>{
-if(merged.length>0){
-const prev=merged[merged.length-1];
-const gap=item.x-(prev.x+prev.width);
-// More generous merge tolerance
-if(gap<item.fontSize*0.8&&gap>-item.fontSize*0.3){
-prev.str+=(gap>item.fontSize*0.3?" ":"")+item.str;
-prev.width=item.x+item.width-prev.x;
-prev.fontSize=Math.max(prev.fontSize,item.fontSize);return;
-}
-}
-merged.push({...item});
-});
-line.items=merged;
-line.text=merged.map(m=>m.str).join("  ").replace(/\s{3,}/g,"  ").trim();
-line.itemCount=merged.length;
-line.minX=merged.length?merged[0].x:0;
-line.maxX=merged.length?merged[merged.length-1].x+(merged[merged.length-1].width||0):0;
-});
-return lines.filter(l=>l.text);
-}
-
-// Detect median font size (body text size)
-function getBodyFontSize(lines){
-const sizes=[];
-lines.forEach(l=>l.items.forEach(it=>sizes.push(Math.round(it.fontSize))));
-if(!sizes.length)return 10;
-const freq={};sizes.forEach(s=>{freq[s]=(freq[s]||0)+1});
-return Number(Object.entries(freq).sort((a,b)=>b[1]-a[1])[0][0]);
-}
-
-// Detect table regions using column alignment analysis
-function detectTableRegions(lines){
-// For each line, collect x-positions of items
-// A table region is a consecutive run of lines where items align to common column positions
-if(lines.length<3)return{tables:[],textLines:lines};
-
-// Find candidate table lines: lines with 2+ items with consistent x-positions
-const multiItemLines=lines.map((l,i)=>({idx:i,line:l,xPositions:l.items.map(it=>Math.round(it.x/3)*3)})).filter(l=>l.xPositions.length>=2);
-
-if(multiItemLines.length<2)return{tables:[],textLines:lines};
-
-// Cluster x-positions across all multi-item lines to find column boundaries
-const allXs=[];multiItemLines.forEach(l=>l.xPositions.forEach(x=>allXs.push(x)));
-const colClusters=clusterValues(allXs,15);
-
-// A line "fits" a column set if most of its x-positions snap to known columns
-function lineMatchesCols(xPositions,cols,tolerance){
-if(!xPositions.length)return false;
-let matched=0;
-xPositions.forEach(x=>{if(cols.some(c=>Math.abs(x-c.center)<=tolerance))matched++});
-return matched>=xPositions.length*0.6;
-}
-
-// Find consecutive runs of lines that match the column pattern
-const isTableLine=new Array(lines.length).fill(false);
-multiItemLines.forEach(ml=>{
-if(lineMatchesCols(ml.xPositions,colClusters,18))isTableLine[ml.idx]=true;
-});
-
-// Extract table regions (consecutive runs of table lines, allowing 1-line gaps)
-const tables=[];let tableStart=null;
-for(let i=0;i<lines.length;i++){
-if(isTableLine[i]){
-if(tableStart===null)tableStart=i;
-}else{
-// Allow a 1-line gap within a table (e.g. empty rows)
-if(tableStart!==null&&i+1<lines.length&&isTableLine[i+1])continue;
-if(tableStart!==null&&i-tableStart>=2){
-tables.push({start:tableStart,end:i-1});
-}
-tableStart=null;
-}
-}
-if(tableStart!==null&&lines.length-tableStart>=2){
-tables.push({start:tableStart,end:lines.length-1});
-}
-
-// Everything not in a table is text
-const textLines=[];
-const tableSet=new Set();
-tables.forEach(t=>{for(let i=t.start;i<=t.end;i++)tableSet.add(i)});
-lines.forEach((l,i)=>{if(!tableSet.has(i))textLines.push(l)});
-
-return{tables,textLines};
-}
-
-// Convert a table region into structured rows with aligned columns
-function buildTableSheet(lines,startIdx,endIdx,pageNum){
-const tableLines=lines.slice(startIdx,endIdx+1);
-const allXs=[];
-tableLines.forEach(l=>l.items.forEach(it=>allXs.push(Math.round(it.x/3)*3)));
-const cols=clusterValues(allXs,15).sort((a,b)=>a.center-b.center);
-let numCols=cols.length;
-if(numCols<2)return null;
-
-// Map each line's items into columns
-let rows=tableLines.map(line=>{
-const row=new Array(numCols).fill("");
-line.items.forEach(item=>{
-const x=Math.round(item.x/3)*3;
-let bestCol=0,bestDist=Infinity;
-cols.forEach((c,ci)=>{const d=Math.abs(x-c.center);if(d<bestDist){bestDist=d;bestCol=ci}});
-row[bestCol]=row[bestCol]?row[bestCol]+" "+item.str:item.str;
-});
-return row;
-});
-
-if(rows.length<2)return null;
-
-// POST-PROCESSING 1: Merge continuation rows
-// A continuation row has content only in one column, at the same position as the row above
-const mergedRows=[];
-rows.forEach((row,i)=>{
-const filledCols=row.map((c,ci)=>c.trim()?ci:-1).filter(ci=>ci>=0);
-if(filledCols.length===1&&mergedRows.length>0){
-const col=filledCols[0];
-const prev=mergedRows[mergedRows.length-1];
-if(prev[col]){
-// This is a continuation of the previous row's cell
-prev[col]+=" "+row[col];
-return;
-}
-}
-mergedRows.push([...row]);
-});
-
-// POST-PROCESSING 2: Drop columns that are empty or contain only bullet markers
-const colHasContent=new Array(numCols).fill(false);
-mergedRows.forEach(row=>{
-row.forEach((cell,ci)=>{
-const trimmed=cell.trim();
-if(trimmed&&!BULLET_RE.test(trimmed)&&!SUB_BULLET_RE.test(trimmed)&&trimmed!=="o")
-colHasContent[ci]=true;
-});
-});
-
-// Strip bullet-only values from cells, then filter empty columns
-const keepCols=[];
-for(let ci=0;ci<numCols;ci++){
-if(colHasContent[ci])keepCols.push(ci);
-}
-
-if(keepCols.length<1)return null;
-
-const cleanRows=mergedRows.map(row=>{
-return keepCols.map(ci=>{
-let val=row[ci]||"";
-// Clean up bullet prefixes that survived
-val=val.replace(BULLET_PREFIX_RE,"").replace(/^[o]\s+/,"").trim();
-return val;
-});
-});
-
-if(cleanRows.length<2)return null;
-return{name:`Page ${pageNum} Table`,type:"table",headers:cleanRows[0],rows:cleanRows.slice(1)};
-}
-
-// Build text content from non-table lines, preserving paragraph structure
-function buildTextSections(textLines,bodyFontSize,pageNum){
-// Instead of splitting into many sections, build a flat list of paragraphs
-// with heading flags, all belonging to the same page
-const paragraphs=[];
-let currentPara=[];
-
-// Calculate typical line spacing for this page
-const lineGaps=[];
-for(let i=1;i<textLines.length;i++){
-const gap=Math.abs(textLines[i-1].y-textLines[i].y);
-if(gap>0&&gap<bodyFontSize*5)lineGaps.push(gap);
-}
-lineGaps.sort((a,b)=>a-b);
-const typicalGap=lineGaps.length?lineGaps[Math.floor(lineGaps.length*0.3)]:bodyFontSize*1.5;
-const paraBreakThreshold=typicalGap*1.4;
-
-function flushPara(){
-if(currentPara.length){
-paragraphs.push({text:currentPara.join(" "),isHeading:false});
-currentPara=[];
-}
-}
-
-textLines.forEach((line,i)=>{
-const prevLine=i>0?textLines[i-1]:null;
-const gap=prevLine?Math.abs(prevLine.y-line.y):0;
-
-// Heading = significantly larger font AND short text
-const isHeading=line.fontSize>bodyFontSize*1.2&&line.text.length<80;
-
-// Paragraph break signals
-const hasParaGap=prevLine&&gap>paraBreakThreshold;
-const indentChanged=prevLine&&Math.abs(line.minX-prevLine.minX)>bodyFontSize*2;
-const prevFontName=prevLine&&prevLine.items.length?prevLine.items[0].fontName:"";
-const thisFontName=line.items.length?line.items[0].fontName:"";
-const fontChanged=prevLine&&thisFontName!==prevFontName;
-
-if(isHeading){
-flushPara();
-paragraphs.push({text:line.text,isHeading:true});
-}else if(hasParaGap||indentChanged){
-flushPara();
-currentPara.push(line.text);
-}else if(fontChanged&&prevLine&&currentPara.length>0){
-// Font changed mid-flow: break paragraph but don't make it a heading
-flushPara();
-currentPara.push(line.text);
-}else{
-currentPara.push(line.text);
-}
-});
-flushPara();
-return paragraphs;
-}
-
-// Convert paragraphs from a page into a single sheet
-function paragraphsToSheet(paragraphs,pageTitle){
-if(!paragraphs.length)return null;
-const textContent=paragraphs.map(p=>p.text).join("\n\n");
-const rows=paragraphs.map((p,i)=>{
-const prefix=p.isHeading?"[H] ":"";
-return[String(i+1),prefix+p.text];
-});
-return{
-name:pageTitle.substring(0,31),type:"text",
-headers:["#","Content"],
-rows:rows,
-textContent:textContent,
+const state = {
+  file: null, fileData: null, redactEnabled: false,
+  redactState: {}, customKeywords: "", result: null, exportFormat: "xlsx"
 };
+REDACTION_GROUPS.forEach(g => g.items.forEach(item => { state.redactState[item.id] = item.on; }));
+
+// ============================================================
+// DOM REFERENCES & FILE HANDLING
+// ============================================================
+const $ = sel => document.querySelector(sel);
+const dropzone = $("#dropzone"), fileInput = $("#fileInput"), processBtn = $("#processBtn");
+const redactToggle = $("#redactToggle"), redactPanel = $("#redactPanel");
+const uploadPhase = $("#uploadPhase"), resultsPhase = $("#resultsPhase");
+
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("over"); });
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("over"));
+dropzone.addEventListener("drop", e => { e.preventDefault(); dropzone.classList.remove("over"); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener("change", e => handleFile(e.target.files[0]));
+
+function handleFile(f) {
+  if (!f || f.type !== "application/pdf") { showError("Please upload a PDF file."); return; }
+  state.file = f; state.result = null; hideError();
+  $("#dropIcon").textContent = "📄";
+  $("#dropHint").classList.add("hidden"); $("#dropFile").classList.remove("hidden");
+  $("#fileName").textContent = f.name;
+  $("#fileSize").textContent = `${(f.size / 1024).toFixed(1)} KB — Click to change`;
+  processBtn.disabled = false;
+  const reader = new FileReader();
+  reader.onload = () => { state.fileData = reader.result; };
+  reader.readAsArrayBuffer(f);
 }
 
-// Legacy wrapper - no longer used but kept for safety
-function sectionsToSheets(sections){
-const allParas=[];
-sections.forEach(sec=>{
-if(sec.title&&sec.title.length>3)allParas.push({text:sec.title,isHeading:true});
-sec.paragraphs.forEach(p=>allParas.push({text:p,isHeading:false}));
-});
-if(!allParas.length)return[];
-const sheet=paragraphsToSheet(allParas,"Content");
-return sheet?[sheet]:[];
+// ============================================================
+// REDACTION UI
+// ============================================================
+redactToggle.addEventListener("click", () => { state.redactEnabled = !state.redactEnabled; renderRedactToggle(); });
+
+function renderRedactToggle() {
+  const on = state.redactEnabled;
+  redactToggle.classList.toggle("on", on); $("#toggleTrack").classList.toggle("on", on);
+  $("#toggleKnob").classList.toggle("on", on); $("#toggleLabel").classList.toggle("on", on);
+  redactPanel.classList.toggle("hidden", !on); updateActiveCount(); updateProcessBtn();
 }
 
-async function processFile(){
-if(!state.fileData)return;processBtn.disabled=true;
-processBtn.innerHTML=`<span style="display:inline-flex;align-items:center;gap:10px"><span class="spinner"></span>Loading...</span>`;hideError();
-try{
-await nlpReady;
-const pdf=await pdfjsLib.getDocument({data:state.fileData.slice(0)}).promise;
-const numPages=pdf.numPages,sheets=[],pageImages=[];let fullText="";
-for(let i=1;i<=numPages;i++){
-processBtn.innerHTML=`<span style="display:inline-flex;align-items:center;gap:10px"><span class="spinner"></span>Page ${i}/${numPages}...</span>`;
-const page=await pdf.getPage(i);
-const textContent=await page.getTextContent();
-
-// Render page image
-const scale=1.5,viewport=page.getViewport({scale}),canvas=document.createElement("canvas");
-canvas.width=viewport.width;canvas.height=viewport.height;
-await page.render({canvasContext:canvas.getContext("2d"),viewport}).promise;
-pageImages.push(canvas.toDataURL("image/png"));
-
-const items=textContent.items;
-if(!items.length)continue;
-
-// Build structured lines with font info
-const lines=buildLines(items);
-if(!lines.length)continue;
-
-const bodyFont=getBodyFontSize(lines);
-fullText+=lines.map(l=>l.text).join("\n")+"\n\n";
-
-// Detect table regions vs text
-const{tables,textLines}=detectTableRegions(lines);
-
-// Build table sheets
-tables.forEach(t=>{
-const sheet=buildTableSheet(lines,t.start,t.end,i);
-if(sheet)sheets.push(sheet);
-});
-
-// Build text paragraphs from non-table content — one sheet per page
-const paragraphs=buildTextSections(textLines,bodyFont,i);
-const textSheet=paragraphsToSheet(paragraphs,`Page ${i}`);
-if(textSheet)sheets.push(textSheet);
+function updateActiveCount() {
+  const c = Object.values(state.redactState).filter(Boolean).length;
+  $("#activeCount").textContent = state.redactEnabled ? `${c} active` : "";
 }
 
-// If no sheets extracted, add a fallback
-if(sheets.length===0&&fullText.trim()){
-sheets.push({name:"Content",type:"text",headers:["Line","Content"],rows:fullText.split("\n").filter(l=>l.trim()).map((l,i)=>[String(i+1),l]),textContent:fullText});
+function updateProcessBtn() {
+  const c = Object.values(state.redactState).filter(Boolean).length;
+  processBtn.textContent = state.redactEnabled && c > 0 ? `Extract & Redact (${c} rules)` : "Extract & Convert";
 }
 
-let redactionStats=null;
-if(state.redactEnabled){processBtn.innerHTML=`<span style="display:inline-flex;align-items:center;gap:10px"><span class="spinner"></span>Redacting${nlp?' (NLP+patterns+context)':''}...</span>`;redactionStats=applyRedactions(fullText,sheets)}
-state.result={title:state.file.name.replace(/\.pdf$/i,""),sheets,pageImages,redactionStats};
-renderResults();
-}catch(err){console.error(err);showError("Failed: "+(err.message||"Unknown error"));processBtn.disabled=false;updateProcessBtn()}}
-function renderResults(){
-const r=state.result;uploadPhase.classList.add("hidden");resultsPhase.classList.remove("hidden");
-let html='<div class="fade-up">';
-html+=`<div class="banner banner-success"><span style="font-size:22px">✓</span><div><p style="color:#4ade80;font-weight:600;font-size:16px">Content extracted</p><p style="color:#6b7f6e;font-size:13px;margin-top:2px">${r.sheets.length} section${r.sheets.length!==1?'s':''} · ${r.pageImages.length} page${r.pageImages.length!==1?'s':''}</p></div></div>`;
-if(r.redactionStats&&r.redactionStats.total_redactions>0){html+=`<div class="banner banner-redact"><span style="font-size:22px">🔒</span><div style="flex:1"><p style="color:#fbbf24;font-weight:600;font-size:16px">${r.redactionStats.total_redactions} redaction${r.redactionStats.total_redactions!==1?'s':''}</p><p style="color:#a09060;font-size:13px;margin-top:2px">${Object.entries(r.redactionStats.by_category).map(([k,v])=>`${k}: ${v}`).join(' · ')}</p></div></div>`}
-else if(r.redactionStats){html+=`<div class="banner" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08)"><span style="font-size:22px">🔒</span><div><p style="color:#8a85a0;font-weight:500;font-size:15px">No redactable content detected</p></div></div>`}
-r.sheets.forEach(sheet=>{
-html+=`<div class="section-box"><div class="section-header"><span class="badge">${sheet.type==="table"?"TABLE":"TEXT"}</span><span style="font-size:15px;color:#d0cbe0;font-weight:500">${sheet.name}</span>${sheet.rows?`<span style="font-size:12px;color:#6b6580;margin-left:auto">${sheet.rows.length} rows</span>`:''}</div><div style="overflow-x:auto;max-height:260px">`;
-if(sheet.headers&&sheet.rows){html+=`<table class="preview-table"><thead><tr>${sheet.headers.map(h=>`<th>${hlr(esc(h))}</th>`).join('')}</tr></thead><tbody>`;sheet.rows.slice(0,10).forEach(row=>{html+=`<tr>${row.map(c=>`<td>${hlr(esc(c))}</td>`).join('')}</tr>`});if(sheet.rows.length>10)html+=`<tr><td colspan="${sheet.headers.length}" style="text-align:center;color:#5a5670;font-style:italic;padding:12px">+ ${sheet.rows.length-10} more rows</td></tr>`;html+='</tbody></table>'}
-else if(sheet.textContent){html+=`<div style="padding:14px 18px;color:#9a94b0;font-size:14px;line-height:1.7;max-height:200px;overflow:auto">${hlr(esc(sheet.textContent.substring(0,600)))}${sheet.textContent.length>600?'...':''}</div>`}
-html+='</div></div>'});
-if(r.pageImages.length>0){html+=`<div class="section-box" style="padding:16px 22px"><p style="font-size:14px;font-weight:600;color:#818cf8;margin-bottom:12px">🖼 Pages</p><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px">${r.pageImages.map((src,i)=>`<img src="${src}" alt="Page ${i+1}" class="page-thumb" title="Page ${i+1}">`).join('')}</div></div>`}
-html+=`<div class="export-box"><p class="mono" style="font-size:14px;color:#7a7590;margin-bottom:14px;font-weight:500;text-transform:uppercase;letter-spacing:1px">Export as</p><div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap"><button class="format-chip active" data-fmt="xlsx">📊 Excel (.xls)</button><button class="format-chip" data-fmt="csv">📋 CSV</button><button class="format-chip" data-fmt="html">✏️ Editable HTML</button></div><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="glow-btn" id="exportBtn">Prepare Excel</button><button class="secondary-btn" id="resetBtn">Start over</button></div><div id="dlBox" class="dl-link-box hidden"><span style="font-size:20px">⬇</span><a id="dlLink" class="dl-link" href="#" download="">Download</a></div></div></div>`;
-resultsPhase.innerHTML=html;
-resultsPhase.querySelectorAll("[data-fmt]").forEach(btn=>{btn.addEventListener("click",()=>{resultsPhase.querySelectorAll("[data-fmt]").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.exportFormat=btn.dataset.fmt;$("#dlBox").classList.add("hidden");$("#exportBtn").textContent=`Prepare ${state.exportFormat==="xlsx"?"Excel":state.exportFormat==="csv"?"CSV":"HTML"}`})});
-$("#exportBtn").addEventListener("click",handleExport);$("#resetBtn").addEventListener("click",resetApp)}
-function toBase64(str){const bytes=new TextEncoder().encode(str);let bin="";bytes.forEach(b=>bin+=String.fromCharCode(b));return btoa(bin)}
-function escCSV(v){const s=String(v??"");return s.includes(",")||s.includes('"')||s.includes("\n")?`"${s.replace(/"/g,'""')}"`:s}
-function handleExport(){
-const r=state.result;if(!r)return;let href,filename;
-if(state.exportFormat==="xlsx"){let h=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>`;r.sheets.forEach(s=>{h+=`<x:ExcelWorksheet><x:Name>${s.name.substring(0,31)}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>`});h+=`</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>`;r.sheets.forEach(s=>{h+=`<table border="1">`;if(s.headers)h+=`<tr>${s.headers.map(hd=>`<th style="background:#2d3436;color:#fff;font-weight:bold;padding:8px;font-family:Calibri">${hd}</th>`).join('')}</tr>`;if(s.rows)s.rows.forEach((row,ri)=>{const bg=ri%2===0?"#f8f9fa":"#fff";h+=`<tr>${row.map(c=>{const v=String(c??"");const isR=v.includes("[REDACTED");return`<td style="padding:6px;font-family:Calibri;background:${isR?'#fff3cd':bg};${isR?'color:#856404;font-weight:bold;':''}">${v}</td>`}).join('')}</tr>`});h+=`</table>`});h+=`</body></html>`;href=`data:application/vnd.ms-excel;base64,${toBase64(h)}`;filename=`${r.title}.xls`}
-else if(state.exportFormat==="csv"){const csv=r.sheets.map(s=>{const lines=[s.headers.map(escCSV).join(",")];s.rows.forEach(row=>lines.push(row.map(escCSV).join(",")));return`--- ${s.name} ---\n${lines.join("\n")}`}).join("\n\n");href=`data:text/csv;base64,${toBase64(csv)}`;filename=`${r.title}.csv`}
-else{let h=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${r.title}</title><style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6;color:#222}h1{font-size:24px;border-bottom:2px solid #333;padding-bottom:8px}h2{font-size:18px;margin-top:30px;color:#444}table{border-collapse:collapse;width:100%;margin:16px 0}th{background:#2d3436;color:#fff;padding:10px 12px;text-align:left}td{padding:8px 12px;border:1px solid #ddd}tr:nth-child(even){background:#f5f5f5}p{margin:8px 0}.redacted{background:#fff3cd;color:#856404;font-weight:bold;padding:2px 6px;border-radius:3px}.page-img{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:16px 0;box-shadow:0 2px 8px rgba(0,0,0,.1)}[contenteditable]{outline:none}@media print{body{margin:0}}</style></head><body contenteditable="true"><h1>${r.title}</h1>`;r.sheets.forEach(s=>{h+=`<h2>${s.name}</h2>`;if(s.type==="text"&&s.textContent){s.textContent.split("\n").forEach(p=>{if(p.trim())h+=`<p>${p.replace(/\[REDACTED[^\]]*\]/g,'<span class="redacted">$&</span>')}</p>`})}else if(s.headers&&s.rows){h+=`<table><tr>${s.headers.map(hd=>`<th>${hd}</th>`).join('')}</tr>`;s.rows.forEach(row=>{h+=`<tr>${row.map(c=>`<td>${String(c??'').replace(/\[REDACTED[^\]]*\]/g,'<span class="redacted">$&</span>')}</td>`).join('')}</tr>`});h+=`</table>`}const pn=parseInt(s.name.replace(/\D/g,''));if(pn&&r.pageImages[pn-1])h+=`<img class="page-img" src="${r.pageImages[pn-1]}" alt="Page ${pn}">`});h+=`</body></html>`;href=`data:text/html;base64,${toBase64(h)}`;filename=`${r.title}_editable.html`}
-const dl=$("#dlLink");dl.href=href;dl.download=filename;dl.textContent=`Download ${filename}`;$("#dlBox").classList.remove("hidden")}
-function esc(str){const d=document.createElement("div");d.textContent=String(str??"");return d.innerHTML}
-function hlr(html){return html.replace(/\[REDACTED[^\]]*\]/g,'<span class="redacted-tag">$&</span>')}
-function showError(msg){const el=$("#errorMsg");el.textContent=msg;el.classList.remove("hidden")}
-function hideError(){$("#errorMsg").classList.add("hidden")}
-function resetApp(){state.file=null;state.fileData=null;state.result=null;uploadPhase.classList.remove("hidden");resultsPhase.classList.add("hidden");resultsPhase.innerHTML="";$("#dropIcon").textContent="📁";$("#dropHint").classList.remove("hidden");$("#dropFile").classList.add("hidden");processBtn.disabled=true;updateProcessBtn();fileInput.value=""}
+function buildRedactPanel() {
+  let html = "";
+  REDACTION_GROUPS.forEach(group => {
+    const onCount = group.items.filter(i => state.redactState[i.id]).length;
+    const gs = onCount === 0 ? "none" : onCount === group.items.length ? "all" : "some";
+    html += `<div class="group-box" data-group="${group.id}"><div class="group-header"><div style="display:flex;align-items:center;gap:10px" data-collapse="${group.id}"><span class="group-arrow" id="arrow-${group.id}">▾</span><span class="group-title">${group.label}</span><span class="group-count" id="gcount-${group.id}">${onCount}/${group.items.length}</span></div><button class="sel-all ${gs}" data-selall="${group.id}" id="selall-${group.id}"><span class="chk ${gs==='all'?'on':''}" id="selchk-${group.id}" ${gs==='some'?'style="border-color:#a855f7;background:rgba(168,85,247,.4)"':''}>${gs==='all'?'✓':gs==='some'?'–':''}</span>Select all</button></div><div class="group-items" id="gitems-${group.id}">`;
+    group.items.forEach(item => {
+      const m = [];
+      if (item.nlpExtract) m.push('<span class="method-tag method-nlp">NLP</span>');
+      if (item.contextLabels && item.contextLabels.length) m.push('<span class="method-tag method-ctx">CTX</span>');
+      if (item.patterns && item.patterns.length) m.push('<span class="method-tag method-rgx">RGX</span>');
+      html += `<div class="item-chip ${state.redactState[item.id]?'on':''}" data-item="${item.id}"><div class="chk ${state.redactState[item.id]?'on':''}" id="ichk-${item.id}">${state.redactState[item.id]?'✓':''}</div><span class="label">${item.label} ${m.join('')}</span></div>`;
+    });
+    html += `</div></div>`;
+  });
+  html += `<div class="group-box"><div class="group-header" data-item="custom_kw_toggle"><div style="display:flex;align-items:center;gap:10px"><div class="chk" id="ichk-custom_kw"></div><span class="group-title">Custom Keywords</span></div><span class="mono" style="font-size:11px;color:#6b6580">Your own terms</span></div><div id="customKwBox" class="hidden" style="padding:4px 16px 14px"><input type="text" id="customKwInput" value="" placeholder="Enter keywords separated by commas" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(251,191,36,.2);background:rgba(0,0,0,.3);color:#e8e6f0;font-family:'JetBrains Mono',monospace;font-size:12px;outline:none"></div></div>`;
+  html += `<div style="display:flex;gap:12px;padding:8px 4px;flex-wrap:wrap;align-items:center"><span style="font-size:11px;color:#6b6580">Detection:</span><span class="method-tag method-nlp">NLP</span><span style="font-size:11px;color:#6b6580">Language</span><span class="method-tag method-ctx">CTX</span><span style="font-size:11px;color:#6b6580">Labels</span><span class="method-tag method-rgx">RGX</span><span style="font-size:11px;color:#6b6580">Patterns</span></div>`;
+  redactPanel.innerHTML = html;
+
+  redactPanel.addEventListener("click", e => {
+    const itemEl = e.target.closest("[data-item]"), collapseEl = e.target.closest("[data-collapse]"), selAllEl = e.target.closest("[data-selall]");
+    if (e.target.closest("[data-item='custom_kw_toggle']")) { $("#customKwBox").classList.toggle("hidden"); return; }
+    if (selAllEl) { e.stopPropagation(); const gid = selAllEl.dataset.selall, group = REDACTION_GROUPS.find(g => g.id === gid), allOn = group.items.every(i => state.redactState[i.id]); group.items.forEach(i => { state.redactState[i.id] = !allOn; }); refreshGroupUI(gid); updateActiveCount(); updateProcessBtn(); return; }
+    if (collapseEl) { const gid = collapseEl.dataset.collapse; $(`#gitems-${gid}`).classList.toggle("hidden"); $(`#arrow-${gid}`).classList.toggle("collapsed"); return; }
+    if (itemEl && itemEl.dataset.item) { const id = itemEl.dataset.item; state.redactState[id] = !state.redactState[id]; const chk = $(`#ichk-${id}`); if (chk) { chk.classList.toggle("on"); chk.textContent = state.redactState[id] ? "✓" : ""; } itemEl.classList.toggle("on"); const group = REDACTION_GROUPS.find(g => g.items.some(i => i.id === id)); if (group) refreshGroupUI(group.id); updateActiveCount(); updateProcessBtn(); }
+  });
+  const kwInput = $("#customKwInput");
+  if (kwInput) kwInput.addEventListener("input", e => { state.customKeywords = e.target.value; });
+}
+
+function refreshGroupUI(gid) {
+  const group = REDACTION_GROUPS.find(g => g.id === gid);
+  const onCount = group.items.filter(i => state.redactState[i.id]).length;
+  const gs = onCount === 0 ? "none" : onCount === group.items.length ? "all" : "some";
+  $(`#gcount-${gid}`).textContent = `${onCount}/${group.items.length}`;
+  const selBtn = $(`#selall-${gid}`); selBtn.className = `sel-all ${gs}`;
+  const selChk = $(`#selchk-${gid}`); selChk.className = `chk ${gs==='all'?'on':''}`;
+  selChk.style = gs === 'some' ? 'border-color:#a855f7;background:rgba(168,85,247,.4)' : '';
+  selChk.textContent = gs === 'all' ? '✓' : gs === 'some' ? '–' : '';
+  group.items.forEach(item => { const chip = redactPanel.querySelector(`[data-item="${item.id}"]`); if (chip) { chip.classList.toggle("on", state.redactState[item.id]); const chk = $(`#ichk-${item.id}`); if (chk) { chk.classList.toggle("on", state.redactState[item.id]); chk.textContent = state.redactState[item.id] ? "✓" : ""; } } });
+}
+
+buildRedactPanel();
+
+// ============================================================
+// REDACTION ENGINE — 3-pass: Regex → NLP → Context
+// ============================================================
+function applyRedactions(fullText, sheets) {
+  const stats = { total_redactions: 0, by_category: {} };
+  const activeItems = [];
+  REDACTION_GROUPS.forEach(g => g.items.forEach(item => { if (state.redactState[item.id]) activeItems.push(item); }));
+  if (state.customKeywords.trim()) {
+    state.customKeywords.split(",").map(k => k.trim()).filter(Boolean).forEach(kw => {
+      activeItems.push({ id: "custom_" + kw, tag: "Custom", patterns: [new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')], contextLabels: [], nlpExtract: null });
+    });
+  }
+
+  // NLP entity extraction
+  const nlpEntities = {};
+  if (nlp) {
+    const doc = nlp(fullText);
+    activeItems.forEach(item => {
+      if (item.nlpExtract) {
+        const found = item.nlpExtract(doc);
+        if (found && found.length > 0) {
+          if (!nlpEntities[item.tag]) nlpEntities[item.tag] = new Set();
+          found.forEach(s => { const t = s.trim(); if (t.length >= 2) nlpEntities[item.tag].add(t); });
+        }
+      }
+    });
+  }
+  const nlpPatterns = [];
+  Object.entries(nlpEntities).forEach(([tag, strings]) => {
+    strings.forEach(s => { nlpPatterns.push({ pattern: new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), tag }); });
+  });
+
+  // Context label patterns
+  const contextPatterns = [];
+  activeItems.forEach(item => {
+    if (item.contextLabels && item.contextLabels.length > 0) {
+      const lg = item.contextLabels.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join("|");
+      contextPatterns.push({ pattern: new RegExp(`(?:${lg})\\s*[:=]?\\s*([^\\n,;]{2,50})`, 'gi'), tag: item.tag, cg: 1 });
+    }
+  });
+
+  function redactStr(str) {
+    let result = str;
+    // Pass 1: Regex
+    activeItems.forEach(item => {
+      if (!item.patterns) return;
+      item.patterns.forEach(pattern => {
+        const re = new RegExp(pattern.source, pattern.flags); let match;
+        while ((match = re.exec(result)) !== null) {
+          const before = result.substring(Math.max(0, match.index - 12), match.index);
+          if (before.includes("[REDACTED")) continue;
+          const replacement = `[REDACTED - ${item.tag}]`;
+          result = result.substring(0, match.index) + replacement + result.substring(match.index + match[0].length);
+          re.lastIndex = match.index + replacement.length;
+          stats.total_redactions++; stats.by_category[item.tag] = (stats.by_category[item.tag] || 0) + 1;
+        }
+      });
+    });
+    // Pass 2: NLP entities
+    nlpPatterns.forEach(({ pattern, tag }) => {
+      const re = new RegExp(pattern.source, pattern.flags); let match;
+      while ((match = re.exec(result)) !== null) {
+        const before = result.substring(Math.max(0, match.index - 12), match.index);
+        if (before.includes("[REDACTED")) continue;
+        const replacement = `[REDACTED - ${tag}]`;
+        result = result.substring(0, match.index) + replacement + result.substring(match.index + match[0].length);
+        re.lastIndex = match.index + replacement.length;
+        stats.total_redactions++; stats.by_category[tag] = (stats.by_category[tag] || 0) + 1;
+      }
+    });
+    // Pass 3: Context labels
+    contextPatterns.forEach(({ pattern, tag, cg }) => {
+      const re = new RegExp(pattern.source, pattern.flags); let match;
+      while ((match = re.exec(result)) !== null) {
+        const value = match[cg]?.trim();
+        if (!value || value.length < 2 || value.includes("[REDACTED")) continue;
+        const valueStart = match.index + match[0].indexOf(value);
+        const beforeVal = result.substring(Math.max(0, valueStart - 12), valueStart);
+        if (beforeVal.includes("[REDACTED")) continue;
+        const replacement = match[0].replace(value, `[REDACTED - ${tag}]`);
+        result = result.substring(0, match.index) + replacement + result.substring(match.index + match[0].length);
+        re.lastIndex = match.index + replacement.length;
+        stats.total_redactions++; stats.by_category[tag] = (stats.by_category[tag] || 0) + 1;
+      }
+    });
+    return result;
+  }
+
+  sheets.forEach(sheet => {
+    if (sheet.rows) sheet.rows = sheet.rows.map(row => row.map(cell => redactStr(cell)));
+    if (sheet.headers) sheet.headers = sheet.headers.map(h => redactStr(h));
+    if (sheet.textContent) sheet.textContent = redactStr(sheet.textContent);
+  });
+  return stats;
+}
+
+// ============================================================
+// PDF EXTRACTION ENGINE
+// ============================================================
+function getFontSize(item) {
+  return Math.abs(item.transform[0]) || Math.abs(item.transform[3]) || item.height || 10;
+}
+
+function clusterValues(values, tolerance) {
+  if (!values.length) return [];
+  const sorted = [...values].sort((a, b) => a - b);
+  const clusters = [[sorted[0]]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] - sorted[i - 1] <= tolerance) clusters[clusters.length - 1].push(sorted[i]);
+    else clusters.push([sorted[i]]);
+  }
+  return clusters.map(c => ({ center: c.reduce((a, b) => a + b, 0) / c.length, count: c.length, min: c[0], max: c[c.length - 1] }));
+}
+
+// Bullet characters to strip
+const BULLET_RE = /^[\u2022\u2023\u25E6\u2043\u2219\u25CF\u25CB\u25AA\u25AB\u2013\u2014\u2022\u00B7\u2219\u25CB\u25CF\u25E6\u25BA\u25B8\u2023\u002D\u2013\u2014]+\s*$/;
+const BULLET_PREFIX_RE = /^[\u2022\u2023\u25E6\u2043\u2219\u25CF\u25CB\u25AA\u25AB\u2013\u2014\u2022\u00B7\u2219\u25CB\u25CF\u25E6\u25BA\u25B8\u2023\u002D\u2013\u2014]+\s+/;
+const SUB_BULLET_RE = /^[o]\s*$/;
+
+// Build structured lines from raw pdf.js text items
+function buildLines(items) {
+  const yTolerance = 3;
+  const sorted = [...items].filter(it => it.str.trim()).sort((a, b) => b.transform[5] - a.transform[5] || a.transform[4] - b.transform[4]);
+  const lines = [];
+  let currentLine = null;
+  sorted.forEach(item => {
+    const y = item.transform[5], x = item.transform[4];
+    const fontSize = getFontSize(item);
+    if (!currentLine || Math.abs(y - currentLine.y) > yTolerance) {
+      currentLine = { y, items: [], fontSize: 0 }; lines.push(currentLine);
+    }
+    currentLine.items.push({ str: item.str, x, width: item.width || 0, fontSize, fontName: item.fontName || "" });
+    currentLine.fontSize = Math.max(currentLine.fontSize, fontSize);
+  });
+
+  lines.forEach(line => {
+    line.items.sort((a, b) => a.x - b.x);
+    // Strip standalone bullet items
+    const debulleted = [];
+    for (let i = 0; i < line.items.length; i++) {
+      const item = line.items[i];
+      const isBullet = BULLET_RE.test(item.str.trim()) || SUB_BULLET_RE.test(item.str.trim());
+      if (isBullet && i + 1 < line.items.length) continue;
+      const cleaned = { ...item };
+      cleaned.str = cleaned.str.replace(BULLET_PREFIX_RE, "");
+      debulleted.push(cleaned);
+    }
+    // Merge close fragments
+    const merged = [];
+    debulleted.forEach(item => {
+      if (merged.length > 0) {
+        const prev = merged[merged.length - 1];
+        const gap = item.x - (prev.x + prev.width);
+        if (gap < item.fontSize * 0.8 && gap > -item.fontSize * 0.3) {
+          prev.str += (gap > item.fontSize * 0.3 ? " " : "") + item.str;
+          prev.width = item.x + item.width - prev.x;
+          prev.fontSize = Math.max(prev.fontSize, item.fontSize); return;
+        }
+      }
+      merged.push({ ...item });
+    });
+    line.items = merged;
+    line.text = merged.map(m => m.str).join("  ").replace(/\s{3,}/g, "  ").trim();
+    line.itemCount = merged.length;
+    line.minX = merged.length ? merged[0].x : 0;
+    line.maxX = merged.length ? merged[merged.length - 1].x + (merged[merged.length - 1].width || 0) : 0;
+  });
+  return lines.filter(l => l.text);
+}
+
+function getBodyFontSize(lines) {
+  const sizes = [];
+  lines.forEach(l => l.items.forEach(it => sizes.push(Math.round(it.fontSize))));
+  if (!sizes.length) return 10;
+  const freq = {}; sizes.forEach(s => { freq[s] = (freq[s] || 0) + 1; });
+  return Number(Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0]);
+}
+
+function detectTableRegions(lines) {
+  if (lines.length < 3) return { tables: [], textLines: lines };
+  const multiItemLines = lines.map((l, i) => ({ idx: i, line: l, xPositions: l.items.map(it => Math.round(it.x / 3) * 3) })).filter(l => l.xPositions.length >= 2);
+  if (multiItemLines.length < 2) return { tables: [], textLines: lines };
+  const allXs = []; multiItemLines.forEach(l => l.xPositions.forEach(x => allXs.push(x)));
+  const colClusters = clusterValues(allXs, 15);
+
+  function lineMatchesCols(xPositions, cols, tolerance) {
+    if (!xPositions.length) return false;
+    let matched = 0;
+    xPositions.forEach(x => { if (cols.some(c => Math.abs(x - c.center) <= tolerance)) matched++; });
+    return matched >= xPositions.length * 0.6;
+  }
+
+  const isTableLine = new Array(lines.length).fill(false);
+  multiItemLines.forEach(ml => { if (lineMatchesCols(ml.xPositions, colClusters, 18)) isTableLine[ml.idx] = true; });
+
+  const tables = []; let tableStart = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (isTableLine[i]) { if (tableStart === null) tableStart = i; }
+    else {
+      if (tableStart !== null && i + 1 < lines.length && isTableLine[i + 1]) continue;
+      if (tableStart !== null && i - tableStart >= 2) tables.push({ start: tableStart, end: i - 1 });
+      tableStart = null;
+    }
+  }
+  if (tableStart !== null && lines.length - tableStart >= 2) tables.push({ start: tableStart, end: lines.length - 1 });
+
+  const tableSet = new Set();
+  tables.forEach(t => { for (let i = t.start; i <= t.end; i++) tableSet.add(i); });
+  const textLines = lines.filter((l, i) => !tableSet.has(i));
+  return { tables, textLines };
+}
+
+function buildTableSheet(lines, startIdx, endIdx, pageNum) {
+  const tableLines = lines.slice(startIdx, endIdx + 1);
+  const allXs = []; tableLines.forEach(l => l.items.forEach(it => allXs.push(Math.round(it.x / 3) * 3)));
+  const cols = clusterValues(allXs, 15).sort((a, b) => a.center - b.center);
+  const numCols = cols.length;
+  if (numCols < 2) return null;
+
+  let rows = tableLines.map(line => {
+    const row = new Array(numCols).fill("");
+    line.items.forEach(item => {
+      const x = Math.round(item.x / 3) * 3;
+      let bestCol = 0, bestDist = Infinity;
+      cols.forEach((c, ci) => { const d = Math.abs(x - c.center); if (d < bestDist) { bestDist = d; bestCol = ci; } });
+      row[bestCol] = row[bestCol] ? row[bestCol] + " " + item.str : item.str;
+    });
+    return row;
+  });
+  if (rows.length < 2) return null;
+
+  // Merge continuation rows
+  const mergedRows = [];
+  rows.forEach(row => {
+    const filledCols = row.map((c, ci) => c.trim() ? ci : -1).filter(ci => ci >= 0);
+    if (filledCols.length === 1 && mergedRows.length > 0) {
+      const col = filledCols[0], prev = mergedRows[mergedRows.length - 1];
+      if (prev[col]) { prev[col] += " " + row[col]; return; }
+    }
+    mergedRows.push([...row]);
+  });
+
+  // Drop empty/bullet-only columns
+  const colHasContent = new Array(numCols).fill(false);
+  mergedRows.forEach(row => { row.forEach((cell, ci) => {
+    const trimmed = cell.trim();
+    if (trimmed && !BULLET_RE.test(trimmed) && !SUB_BULLET_RE.test(trimmed) && trimmed !== "o") colHasContent[ci] = true;
+  }); });
+  const keepCols = [];
+  for (let ci = 0; ci < numCols; ci++) { if (colHasContent[ci]) keepCols.push(ci); }
+  if (keepCols.length < 1) return null;
+
+  const cleanRows = mergedRows.map(row => keepCols.map(ci => {
+    let val = row[ci] || "";
+    val = val.replace(BULLET_PREFIX_RE, "").replace(/^[o]\s+/, "").trim();
+    return val;
+  }));
+  if (cleanRows.length < 2) return null;
+  return { name: `Page ${pageNum} Table`, type: "table", headers: cleanRows[0], rows: cleanRows.slice(1) };
+}
+
+function buildTextSections(textLines, bodyFontSize, pageNum) {
+  const paragraphs = []; let currentPara = [];
+  const lineGaps = [];
+  for (let i = 1; i < textLines.length; i++) {
+    const gap = Math.abs(textLines[i - 1].y - textLines[i].y);
+    if (gap > 0 && gap < bodyFontSize * 5) lineGaps.push(gap);
+  }
+  lineGaps.sort((a, b) => a - b);
+  const typicalGap = lineGaps.length ? lineGaps[Math.floor(lineGaps.length * 0.3)] : bodyFontSize * 1.5;
+  const paraBreakThreshold = typicalGap * 1.4;
+
+  function flushPara() {
+    if (currentPara.length) { paragraphs.push({ text: currentPara.join(" "), isHeading: false }); currentPara = []; }
+  }
+
+  textLines.forEach((line, i) => {
+    const prevLine = i > 0 ? textLines[i - 1] : null;
+    const gap = prevLine ? Math.abs(prevLine.y - line.y) : 0;
+    const isHeading = line.fontSize > bodyFontSize * 1.2 && line.text.length < 80;
+    const hasParaGap = prevLine && gap > paraBreakThreshold;
+    const indentChanged = prevLine && Math.abs(line.minX - prevLine.minX) > bodyFontSize * 2;
+    const prevFontName = prevLine && prevLine.items.length ? prevLine.items[0].fontName : "";
+    const thisFontName = line.items.length ? line.items[0].fontName : "";
+    const fontChanged = prevLine && thisFontName !== prevFontName;
+
+    if (isHeading) { flushPara(); paragraphs.push({ text: line.text, isHeading: true }); }
+    else if (hasParaGap || indentChanged) { flushPara(); currentPara.push(line.text); }
+    else if (fontChanged && prevLine && currentPara.length > 0) { flushPara(); currentPara.push(line.text); }
+    else { currentPara.push(line.text); }
+  });
+  flushPara();
+  return paragraphs;
+}
+
+function paragraphsToSheet(paragraphs, pageTitle) {
+  if (!paragraphs.length) return null;
+  const textContent = paragraphs.map(p => p.text).join("\n\n");
+  const rows = paragraphs.map((p, i) => {
+    const prefix = p.isHeading ? "[H] " : "";
+    return [String(i + 1), prefix + p.text];
+  });
+  return { name: pageTitle.substring(0, 31), type: "text", headers: ["#", "Content"], rows, textContent };
+}
+
+// ============================================================
+// MAIN PROCESSING PIPELINE
+// ============================================================
+processBtn.addEventListener("click", processFile);
+
+async function processFile() {
+  if (!state.fileData) return;
+  processBtn.disabled = true;
+  processBtn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:10px"><span class="spinner"></span>Loading...</span>`;
+  hideError();
+  try {
+    await nlpReady;
+    const pdf = await pdfjsLib.getDocument({ data: state.fileData.slice(0) }).promise;
+    const numPages = pdf.numPages, sheets = [], pageImages = [];
+    let fullText = "";
+
+    for (let i = 1; i <= numPages; i++) {
+      processBtn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:10px"><span class="spinner"></span>Page ${i}/${numPages}...</span>`;
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+
+      // Render page image at 1.5x scale
+      const scale = 1.5, viewport = page.getViewport({ scale }), canvas = document.createElement("canvas");
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+      pageImages.push(canvas.toDataURL("image/png"));
+
+      const items = textContent.items;
+      if (!items.length) continue;
+
+      const lines = buildLines(items);
+      if (!lines.length) continue;
+
+      const bodyFont = getBodyFontSize(lines);
+      fullText += lines.map(l => l.text).join("\n") + "\n\n";
+
+      const { tables, textLines } = detectTableRegions(lines);
+      tables.forEach(t => { const sheet = buildTableSheet(lines, t.start, t.end, i); if (sheet) sheets.push(sheet); });
+
+      const paragraphs = buildTextSections(textLines, bodyFont, i);
+      const textSheet = paragraphsToSheet(paragraphs, `Page ${i}`);
+      if (textSheet) sheets.push(textSheet);
+    }
+
+    if (sheets.length === 0 && fullText.trim()) {
+      sheets.push({ name: "Content", type: "text", headers: ["Line", "Content"], rows: fullText.split("\n").filter(l => l.trim()).map((l, i) => [String(i + 1), l]), textContent: fullText });
+    }
+
+    let redactionStats = null;
+    if (state.redactEnabled) {
+      processBtn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:10px"><span class="spinner"></span>Redacting${nlp ? ' (NLP+patterns+context)' : ''}...</span>`;
+      redactionStats = applyRedactions(fullText, sheets);
+    }
+
+    state.result = { title: state.file.name.replace(/\.pdf$/i, ""), sheets, pageImages, redactionStats };
+    renderResults();
+  } catch (err) {
+    console.error(err);
+    showError("Failed: " + (err.message || "Unknown error"));
+    processBtn.disabled = false; updateProcessBtn();
+  }
+}
+
+// ============================================================
+// RESULTS RENDERING
+// ============================================================
+function renderResults() {
+  const r = state.result;
+  uploadPhase.classList.add("hidden"); resultsPhase.classList.remove("hidden");
+  let html = '<div class="fade-up">';
+  html += `<div class="banner banner-success"><span style="font-size:22px">✓</span><div><p style="color:#4ade80;font-weight:600;font-size:16px">Content extracted</p><p style="color:#6b7f6e;font-size:13px;margin-top:2px">${r.sheets.length} section${r.sheets.length !== 1 ? 's' : ''} · ${r.pageImages.length} page${r.pageImages.length !== 1 ? 's' : ''}</p></div></div>`;
+
+  if (r.redactionStats && r.redactionStats.total_redactions > 0) {
+    html += `<div class="banner banner-redact"><span style="font-size:22px">🔒</span><div style="flex:1"><p style="color:#fbbf24;font-weight:600;font-size:16px">${r.redactionStats.total_redactions} redaction${r.redactionStats.total_redactions !== 1 ? 's' : ''}</p><p style="color:#a09060;font-size:13px;margin-top:2px">${Object.entries(r.redactionStats.by_category).map(([k, v]) => `${k}: ${v}`).join(' · ')}</p></div></div>`;
+  } else if (r.redactionStats) {
+    html += `<div class="banner" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08)"><span style="font-size:22px">🔒</span><div><p style="color:#8a85a0;font-weight:500;font-size:15px">No redactable content detected</p></div></div>`;
+  }
+
+  r.sheets.forEach(sheet => {
+    html += `<div class="section-box"><div class="section-header"><span class="badge">${sheet.type === "table" ? "TABLE" : "TEXT"}</span><span style="font-size:15px;color:#d0cbe0;font-weight:500">${sheet.name}</span>${sheet.rows ? `<span style="font-size:12px;color:#6b6580;margin-left:auto">${sheet.rows.length} rows</span>` : ''}</div><div style="overflow-x:auto;max-height:260px">`;
+    if (sheet.headers && sheet.rows) {
+      html += `<table class="preview-table"><thead><tr>${sheet.headers.map(h => `<th>${hlr(esc(h))}</th>`).join('')}</tr></thead><tbody>`;
+      sheet.rows.slice(0, 10).forEach(row => { html += `<tr>${row.map(c => `<td>${hlr(esc(c))}</td>`).join('')}</tr>`; });
+      if (sheet.rows.length > 10) html += `<tr><td colspan="${sheet.headers.length}" style="text-align:center;color:#5a5670;font-style:italic;padding:12px">+ ${sheet.rows.length - 10} more rows</td></tr>`;
+      html += '</tbody></table>';
+    } else if (sheet.textContent) {
+      html += `<div style="padding:14px 18px;color:#9a94b0;font-size:14px;line-height:1.7;max-height:200px;overflow:auto">${hlr(esc(sheet.textContent.substring(0, 600)))}${sheet.textContent.length > 600 ? '...' : ''}</div>`;
+    }
+    html += '</div></div>';
+  });
+
+  if (r.pageImages.length > 0) {
+    html += `<div class="section-box" style="padding:16px 22px"><p style="font-size:14px;font-weight:600;color:#818cf8;margin-bottom:12px">🖼 Pages</p><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px">${r.pageImages.map((src, i) => `<img src="${src}" alt="Page ${i + 1}" class="page-thumb" title="Page ${i + 1}">`).join('')}</div></div>`;
+  }
+
+  html += `<div class="export-box"><p class="mono" style="font-size:14px;color:#7a7590;margin-bottom:14px;font-weight:500;text-transform:uppercase;letter-spacing:1px">Export as</p><div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap"><button class="format-chip active" data-fmt="xlsx">📊 Excel (.xls)</button><button class="format-chip" data-fmt="csv">📋 CSV</button><button class="format-chip" data-fmt="html">✏️ Editable HTML</button></div><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="glow-btn" id="exportBtn">Prepare Excel</button><button class="secondary-btn" id="resetBtn">Start over</button></div><div id="dlBox" class="dl-link-box hidden"><span style="font-size:20px">⬇</span><a id="dlLink" class="dl-link" href="#" download="">Download</a></div></div></div>`;
+
+  resultsPhase.innerHTML = html;
+  resultsPhase.querySelectorAll("[data-fmt]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      resultsPhase.querySelectorAll("[data-fmt]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active"); state.exportFormat = btn.dataset.fmt;
+      $("#dlBox").classList.add("hidden");
+      $("#exportBtn").textContent = `Prepare ${state.exportFormat === "xlsx" ? "Excel" : state.exportFormat === "csv" ? "CSV" : "HTML"}`;
+    });
+  });
+  $("#exportBtn").addEventListener("click", handleExport);
+  $("#resetBtn").addEventListener("click", resetApp);
+}
+
+// ============================================================
+// EXPORT (Excel / CSV / Editable HTML)
+// ============================================================
+function toBase64(str) { const bytes = new TextEncoder().encode(str); let bin = ""; bytes.forEach(b => bin += String.fromCharCode(b)); return btoa(bin); }
+function escCSV(v) { const s = String(v ?? ""); return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s; }
+
+function handleExport() {
+  const r = state.result; if (!r) return;
+  let href, filename;
+
+  if (state.exportFormat === "xlsx") {
+    let h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>`;
+    r.sheets.forEach(s => { h += `<x:ExcelWorksheet><x:Name>${s.name.substring(0, 31)}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>`; });
+    h += `</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>`;
+    r.sheets.forEach(s => {
+      h += `<table border="1">`;
+      if (s.headers) h += `<tr>${s.headers.map(hd => `<th style="background:#2d3436;color:#fff;font-weight:bold;padding:8px;font-family:Calibri">${hd}</th>`).join('')}</tr>`;
+      if (s.rows) s.rows.forEach((row, ri) => {
+        const bg = ri % 2 === 0 ? "#f8f9fa" : "#fff";
+        h += `<tr>${row.map(c => { const v = String(c ?? ""); const isR = v.includes("[REDACTED"); return `<td style="padding:6px;font-family:Calibri;background:${isR ? '#fff3cd' : bg};${isR ? 'color:#856404;font-weight:bold;' : ''}">${v}</td>`; }).join('')}</tr>`;
+      });
+      h += `</table>`;
+    });
+    h += `</body></html>`;
+    href = `data:application/vnd.ms-excel;base64,${toBase64(h)}`; filename = `${r.title}.xls`;
+  } else if (state.exportFormat === "csv") {
+    const csv = r.sheets.map(s => {
+      const lines = [s.headers.map(escCSV).join(",")];
+      s.rows.forEach(row => lines.push(row.map(escCSV).join(",")));
+      return `--- ${s.name} ---\n${lines.join("\n")}`;
+    }).join("\n\n");
+    href = `data:text/csv;base64,${toBase64(csv)}`; filename = `${r.title}.csv`;
+  } else {
+    let h = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${r.title}</title><style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6;color:#222}h1{font-size:24px;border-bottom:2px solid #333;padding-bottom:8px}h2{font-size:18px;margin-top:30px;color:#444}table{border-collapse:collapse;width:100%;margin:16px 0}th{background:#2d3436;color:#fff;padding:10px 12px;text-align:left}td{padding:8px 12px;border:1px solid #ddd}tr:nth-child(even){background:#f5f5f5}p{margin:8px 0}.redacted{background:#fff3cd;color:#856404;font-weight:bold;padding:2px 6px;border-radius:3px}.page-img{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:16px 0;box-shadow:0 2px 8px rgba(0,0,0,.1)}[contenteditable]{outline:none}@media print{body{margin:0}}</style></head><body contenteditable="true"><h1>${r.title}</h1>`;
+    r.sheets.forEach(s => {
+      h += `<h2>${s.name}</h2>`;
+      if (s.type === "text" && s.textContent) { s.textContent.split("\n").forEach(p => { if (p.trim()) h += `<p>${p.replace(/\[REDACTED[^\]]*\]/g, '<span class="redacted">$&</span>')}</p>`; }); }
+      else if (s.headers && s.rows) {
+        h += `<table><tr>${s.headers.map(hd => `<th>${hd}</th>`).join('')}</tr>`;
+        s.rows.forEach(row => { h += `<tr>${row.map(c => `<td>${String(c ?? '').replace(/\[REDACTED[^\]]*\]/g, '<span class="redacted">$&</span>')}</td>`).join('')}</tr>`; });
+        h += `</table>`;
+      }
+      const pn = parseInt(s.name.replace(/\D/g, ''));
+      if (pn && r.pageImages[pn - 1]) h += `<img class="page-img" src="${r.pageImages[pn - 1]}" alt="Page ${pn}">`;
+    });
+    h += `</body></html>`;
+    href = `data:text/html;base64,${toBase64(h)}`; filename = `${r.title}_editable.html`;
+  }
+
+  const dl = $("#dlLink"); dl.href = href; dl.download = filename;
+  dl.textContent = `Download ${filename}`; $("#dlBox").classList.remove("hidden");
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function esc(str) { const d = document.createElement("div"); d.textContent = String(str ?? ""); return d.innerHTML; }
+function hlr(html) { return html.replace(/\[REDACTED[^\]]*\]/g, '<span class="redacted-tag">$&</span>'); }
+function showError(msg) { const el = $("#errorMsg"); el.textContent = msg; el.classList.remove("hidden"); }
+function hideError() { $("#errorMsg").classList.add("hidden"); }
+function resetApp() {
+  state.file = null; state.fileData = null; state.result = null;
+  uploadPhase.classList.remove("hidden"); resultsPhase.classList.add("hidden"); resultsPhase.innerHTML = "";
+  $("#dropIcon").textContent = "📁"; $("#dropHint").classList.remove("hidden"); $("#dropFile").classList.add("hidden");
+  processBtn.disabled = true; updateProcessBtn(); fileInput.value = "";
+}
 </script>
 </body>
 </html>
