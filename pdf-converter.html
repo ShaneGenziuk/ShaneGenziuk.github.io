@@ -147,27 +147,8 @@ const nlpReady = new Promise(resolve => {
   document.head.appendChild(s);
 });
 
-// SheetJS for proper .xlsx export
-let XLSX = null;
-const xlsxCDNs = [
-  "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
-  "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js",
-  "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"
-];
-const xlsxReady = (async () => {
-  for (const url of xlsxCDNs) {
-    try {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement("script");
-        s.src = url;
-        s.onload = () => { XLSX = window.XLSX; resolve(); };
-        s.onerror = reject;
-        document.head.appendChild(s);
-      });
-      if (XLSX) return;
-    } catch (e) { /* try next CDN */ }
-  }
-})();
+// Excel XML Spreadsheet helper (no external library needed)
+function escXml(v) { return String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
 // ============================================================
 // REDACTION CATEGORIES (4 groups, 33 items)
@@ -829,38 +810,29 @@ function renderResults() {
 function toBase64(str) { const bytes = new TextEncoder().encode(str); let bin = ""; bytes.forEach(b => bin += String.fromCharCode(b)); return btoa(bin); }
 function escCSV(v) { const s = String(v ?? ""); return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s; }
 
-async function handleExport() {
+function handleExport() {
   const r = state.result; if (!r) return;
-  await xlsxReady;
   let href, filename;
 
   if (state.exportFormat === "xlsx") {
-    if (!XLSX) { alert("Excel library failed to load. Please try again or use CSV."); return; }
-    const wb = XLSX.utils.book_new();
+    // Excel 2003 XML Spreadsheet — no external library needed
+    let x = `<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n<Styles><Style ss:ID="hdr"><Font ss:Bold="1" ss:Color="#FFFFFF" ss:FontName="Calibri"/><Interior ss:Color="#2D3436" ss:Pattern="Solid"/><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style><Style ss:ID="cell"><Font ss:FontName="Calibri"/><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style><Style ss:ID="redact"><Font ss:Bold="1" ss:Color="#856404" ss:FontName="Calibri"/><Interior ss:Color="#FFF3CD" ss:Pattern="Solid"/><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style></Styles>\n`;
     r.sheets.forEach(s => {
-      const data = [];
-      if (s.headers) data.push(s.headers);
-      if (s.rows) s.rows.forEach(row => data.push(row.map(c => c ?? "")));
-      const ws = XLSX.utils.aoa_to_sheet(data);
-      // Bold header row
-      if (s.headers) {
-        const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
-        for (let c = range.s.c; c <= range.e.c; c++) {
-          const addr = XLSX.utils.encode_cell({ r: 0, c });
-          if (ws[addr]) { if (!ws[addr].s) ws[addr].s = {}; ws[addr].s.font = { bold: true }; }
-        }
-        // Set column widths based on content
-        ws["!cols"] = s.headers.map((h, ci) => {
-          let max = String(h).length;
-          if (s.rows) s.rows.forEach(row => { const len = String(row[ci] ?? "").length; if (len > max) max = len; });
-          return { wch: Math.min(Math.max(max + 2, 10), 80) };
-        });
-      }
-      XLSX.utils.book_append_sheet(wb, ws, s.name.substring(0, 31));
+      x += `<Worksheet ss:Name="${escXml(s.name.substring(0, 31))}"><Table>\n`;
+      // Column widths
+      if (s.headers) s.headers.forEach((h, ci) => {
+        let max = String(h).length;
+        if (s.rows) s.rows.forEach(row => { const len = String(row[ci] ?? "").length; if (len > max) max = len; });
+        x += `<Column ss:Width="${Math.min(Math.max(max * 7, 60), 500)}"/>\n`;
+      });
+      if (s.headers) { x += `<Row>${s.headers.map(h => `<Cell ss:StyleID="hdr"><Data ss:Type="String">${escXml(h)}</Data></Cell>`).join('')}</Row>\n`; }
+      if (s.rows) s.rows.forEach(row => {
+        x += `<Row>${row.map(c => { const v = String(c ?? ""); const style = v.includes("[REDACTED") ? "redact" : "cell"; const type = v && !isNaN(v) && v.trim() !== "" ? "Number" : "String"; return `<Cell ss:StyleID="${style}"><Data ss:Type="${type}">${escXml(v)}</Data></Cell>`; }).join('')}</Row>\n`;
+      });
+      x += `</Table></Worksheet>\n`;
     });
-    const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "base64" });
-    href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${xlsxData}`;
-    filename = `${r.title}.xlsx`;
+    x += `</Workbook>`;
+    href = `data:application/vnd.ms-excel;base64,${toBase64(x)}`; filename = `${r.title}.xls`;
   } else if (state.exportFormat === "csv") {
     const csv = r.sheets.map(s => {
       const lines = [s.headers.map(escCSV).join(",")];
