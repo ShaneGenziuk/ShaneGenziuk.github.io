@@ -878,9 +878,12 @@ async function handleExport() {
         s.rows.forEach(row => { h += `<tr>${row.map(c => `<td>${String(c ?? '').replace(/\[REDACTED[^\]]*\]/g, '<span class="redacted">$&</span>')}</td>`).join('')}</tr>`; });
         h += `</table>`;
       }
-      const pn = parseInt(s.name.replace(/\D/g, ''));
-      if (pn && r.pageImages[pn - 1]) h += `<img class="page-img" src="${r.pageImages[pn - 1]}" alt="Page ${pn}">`;
     });
+    // Append all page images
+    if (r.pageImages.length > 0) {
+      h += `<h2>Pages</h2>`;
+      r.pageImages.forEach((src, i) => { h += `<img class="page-img" src="${src}" alt="Page ${i + 1}">`; });
+    }
     h += `</body></html>`;
     href = `data:text/html;base64,${toBase64(h)}`; filename = `${r.title}_editable.html`;
   }
