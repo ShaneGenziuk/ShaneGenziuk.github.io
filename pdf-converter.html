@@ -544,6 +544,14 @@ function getBodyFontSize(lines) {
   return Number(Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0]);
 }
 
+function getBodyFontName(lines) {
+  const freq = {};
+  lines.forEach(l => l.items.forEach(it => { const n = it.fontName || ""; if (n) freq[n] = (freq[n] || 0) + 1; }));
+  const entries = Object.entries(freq);
+  if (!entries.length) return "";
+  return entries.sort((a, b) => b[1] - a[1])[0][0];
+}
+
 function detectTableRegions(lines) {
   if (lines.length < 3) return { tables: [], textLines: lines };
   const multiItemLines = lines.map((l, i) => ({ idx: i, line: l, xPositions: l.items.map(it => Math.round(it.x / 3) * 3) })).filter(l => l.xPositions.length >= 2);
@@ -627,7 +635,7 @@ function buildTableSheet(lines, startIdx, endIdx, pageNum) {
   return { name: `Page ${pageNum} Table`, type: "table", headers: cleanRows[0], rows: cleanRows.slice(1) };
 }
 
-function buildTextSections(textLines, bodyFontSize, pageNum) {
+function buildTextSections(textLines, bodyFontSize, bodyFontName, pageNum) {
   const paragraphs = []; let currentPara = [];
   const lineGaps = [];
   for (let i = 1; i < textLines.length; i++) {
@@ -638,6 +646,26 @@ function buildTextSections(textLines, bodyFontSize, pageNum) {
   const typicalGap = lineGaps.length ? lineGaps[Math.floor(lineGaps.length * 0.3)] : bodyFontSize * 1.5;
   const paraBreakThreshold = typicalGap * 1.4;
 
+  function isBoldFont(fontName) { return /bold/i.test(fontName); }
+  function isAllCaps(text) { const letters = text.replace(/[^a-zA-Z]/g, ""); return letters.length >= 3 && text === text.toUpperCase(); }
+  function isBodyBold() { return isBoldFont(bodyFontName); }
+
+  function detectHeading(line) {
+    const text = line.text;
+    const len = text.length;
+    const thisFontName = line.items.length ? line.items[0].fontName : "";
+    const lineBold = isBoldFont(thisFontName);
+    // Rule 1: Larger font size (lowered threshold to 1.15×)
+    if (line.fontSize > bodyFontSize * 1.15 && len < 100) return true;
+    // Rule 2: Bold font (only if body text is NOT bold) and short
+    if (lineBold && !isBodyBold() && len < 100) return true;
+    // Rule 3: ALL CAPS, 3-80 chars
+    if (isAllCaps(text) && len >= 3 && len <= 80) return true;
+    // Rule 4: Different font from body + short + not a long sentence
+    if (thisFontName && thisFontName !== bodyFontName && len < 80 && !text.includes(". ")) return true;
+    return false;
+  }
+
   function flushPara() {
     if (currentPara.length) { paragraphs.push({ text: currentPara.join(" "), isHeading: false }); currentPara = []; }
   }
@@ -645,7 +673,7 @@ function buildTextSections(textLines, bodyFontSize, pageNum) {
   textLines.forEach((line, i) => {
     const prevLine = i > 0 ? textLines[i - 1] : null;
     const gap = prevLine ? Math.abs(prevLine.y - line.y) : 0;
-    const isHeading = line.fontSize > bodyFontSize * 1.2 && line.text.length < 80;
+    const isHeading = detectHeading(line);
     const hasParaGap = prevLine && gap > paraBreakThreshold;
     const indentChanged = prevLine && Math.abs(line.minX - prevLine.minX) > bodyFontSize * 2;
     const prevFontName = prevLine && prevLine.items.length ? prevLine.items[0].fontName : "";
@@ -711,6 +739,7 @@ async function processFile() {
       if (!lines.length) { pageContents.push({ paragraphs: [], tables: [], image: pageImg }); continue; }
 
       const bodyFont = getBodyFontSize(lines);
+      const bodyFontName = getBodyFontName(lines);
       fullText += lines.map(l => l.text).join("\n") + "\n\n";
 
       const { tables, textLines } = detectTableRegions(lines);
@@ -725,7 +754,7 @@ async function processFile() {
       // Merge text lines + recovered table lines, sorted by y position
       const allText = textLines.concat(recoveredLines).sort((a, b) => b.y - a.y);
 
-      const paragraphs = buildTextSections(allText, bodyFont, i);
+      const paragraphs = buildTextSections(allText, bodyFont, bodyFontName, i);
       pageContents.push({ paragraphs, tables: pageTables, image: pageImg });
       if (paragraphs.length) {
         // Add page separator for multi-page PDFs
