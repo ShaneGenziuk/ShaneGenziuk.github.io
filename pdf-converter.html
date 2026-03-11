@@ -880,16 +880,7 @@ function handleExport() {
   let href, filename;
 
   if (state.exportFormat === "xlsx") {
-    // MHTML-based Excel format — allows embedded images via MIME parts
-    const mimeImages = []; // {cid, mimeType, base64}
-    let pageImgIdx = 0;
-    const addImg = (dataUri, cols) => {
-      const m = dataUri.match(/^data:(image\/[^;]+);base64,(.+)$/);
-      if (!m) return "";
-      const cid = `image${mimeImages.length + 1}.${m[1] === "image/png" ? "png" : "jpg"}`;
-      mimeImages.push({ cid, mimeType: m[1], base64: m[2] });
-      return `<tr><td colspan="${cols}" style="padding:4px"><img src="${cid}" style="max-width:600px;max-height:800px"></td></tr>`;
-    };
+    // HTML-based Excel format — images not supported (use HTML export for images)
     let h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Content</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>`;
     h += `<table border="1">`;
     r.sheets.forEach((s, si) => {
@@ -898,38 +889,13 @@ function handleExport() {
         h += `<tr><td colspan="${colCount}" style="padding:12px;font-family:Calibri;font-weight:bold;background:#e2e8f0;font-size:14px">${s.name}</td></tr>`;
       }
       if (s.headers) h += `<tr>${s.headers.map(hd => `<th style="background:#2d3436;color:#fff;font-weight:bold;padding:8px;font-family:Calibri">${hd}</th>`).join('')}</tr>`;
-      const colCount = s.headers ? s.headers.length : 2;
       if (s.rows) s.rows.forEach((row, ri) => {
-        const firstCell = String(row[0] ?? "");
-        if (firstCell === "" && String(row[1] ?? "").startsWith("--- Page") && r.pageImages && r.pageImages[pageImgIdx]) {
-          h += addImg(r.pageImages[pageImgIdx], colCount);
-          pageImgIdx++;
-        }
         const bg = ri % 2 === 0 ? "#f8f9fa" : "#fff";
         h += `<tr>${row.map(c => { const v = String(c ?? ""); const isR = v.includes("[REDACTED"); return `<td style="padding:6px;font-family:Calibri;background:${isR ? '#fff3cd' : bg};${isR ? 'color:#856404;font-weight:bold;' : ''}">${v}</td>`; }).join('')}</tr>`;
       });
-      if (r.pageImages && pageImgIdx < r.pageImages.length) {
-        const colCount = s.headers ? s.headers.length : 2;
-        h += addImg(r.pageImages[pageImgIdx], colCount);
-        pageImgIdx++;
-      }
     });
-    if (r.pageImages) { while (pageImgIdx < r.pageImages.length) { h += addImg(r.pageImages[pageImgIdx], 2); pageImgIdx++; } }
     h += `</table></body></html>`;
-    // Build MHTML envelope if images exist, otherwise plain HTML
-    if (mimeImages.length > 0) {
-      const boundary = "----=_NextPart_PDF2EXCEL";
-      let mhtml = `MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="${boundary}"\r\n\r\n--${boundary}\r\nContent-Type: text/html; charset="UTF-8"\r\nContent-Location: file:///C:/Temp/pdfexport.htm\r\n\r\n${h}\r\n`;
-      mimeImages.forEach(img => {
-        // Split base64 into 76-char lines for MIME compliance
-        const b64lines = img.base64.replace(/(.{76})/g, "$1\r\n");
-        mhtml += `--${boundary}\r\nContent-Type: ${img.mimeType}\r\nContent-Transfer-Encoding: base64\r\nContent-Location: ${img.cid}\r\n\r\n${b64lines}\r\n`;
-      });
-      mhtml += `--${boundary}--`;
-      href = `data:application/vnd.ms-excel;base64,${toBase64(mhtml)}`; filename = `${r.title}.xls`;
-    } else {
-      href = `data:application/vnd.ms-excel;base64,${toBase64(h)}`; filename = `${r.title}.xls`;
-    }
+    href = `data:application/vnd.ms-excel;base64,${toBase64(h)}`; filename = `${r.title}.xls`;
   } else if (state.exportFormat === "csv") {
     const csv = r.sheets.map(s => {
       const lines = [s.headers.map(escCSV).join(",")];
