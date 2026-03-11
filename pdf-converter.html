@@ -915,6 +915,7 @@ function handleExport() {
           t.rows.forEach(row => { h += `<tr>${row.map(c => `<td>${rdct(String(c ?? ''))}</td>`).join('')}</tr>`; });
           h += `</table>`;
         });
+        if (pc.image) h += `<p><img src="${pc.image}" style="max-width:100%" alt="Page ${pi + 1}"></p>`;
       });
     } else {
       r.sheets.forEach(s => {
@@ -926,6 +927,7 @@ function handleExport() {
           h += `</table>`;
         }
       });
+      if (r.pageImages && r.pageImages.length > 0) { r.pageImages.forEach((src, i) => { h += `<p><img src="${src}" style="max-width:100%" alt="Page ${i + 1}"></p>`; }); }
     }
     h += `</body></html>`;
     href = `data:application/msword;base64,${toBase64(h)}`; filename = `${r.title}.doc`;
