@@ -854,7 +854,7 @@ function renderResults() {
     html += `<div class="section-box" style="padding:16px 22px"><p style="font-size:14px;font-weight:600;color:#818cf8;margin-bottom:12px">🖼 Pages</p><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px">${r.pageImages.map((src, i) => `<img src="${src}" alt="Page ${i + 1}" class="page-thumb" title="Page ${i + 1}">`).join('')}</div></div>`;
   }
 
-  html += `<div class="export-box"><p class="mono" style="font-size:14px;color:#7a7590;margin-bottom:14px;font-weight:500;text-transform:uppercase;letter-spacing:1px">Export as</p><div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap"><button class="format-chip active" data-fmt="xlsx">📊 Excel (.xls)</button><button class="format-chip" data-fmt="csv">📋 CSV</button><button class="format-chip" data-fmt="html">✏️ Editable HTML</button></div><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="glow-btn" id="exportBtn">Prepare Excel</button><button class="secondary-btn" id="resetBtn">Start over</button></div><div id="dlBox" class="dl-link-box hidden"><span style="font-size:20px">⬇</span><a id="dlLink" class="dl-link" href="#" download="">Download</a></div></div></div>`;
+  html += `<div class="export-box"><p class="mono" style="font-size:14px;color:#7a7590;margin-bottom:14px;font-weight:500;text-transform:uppercase;letter-spacing:1px">Export as</p><div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap"><button class="format-chip active" data-fmt="xlsx">📊 Excel (.xls)</button><button class="format-chip" data-fmt="docx">📝 Word (.doc)</button><button class="format-chip" data-fmt="csv">📋 CSV</button><button class="format-chip" data-fmt="html">✏️ Editable HTML</button></div><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="glow-btn" id="exportBtn">Prepare Excel</button><button class="secondary-btn" id="resetBtn">Start over</button></div><div id="dlBox" class="dl-link-box hidden"><span style="font-size:20px">⬇</span><a id="dlLink" class="dl-link" href="#" download="">Download</a></div></div></div>`;
 
   resultsPhase.innerHTML = html;
   resultsPhase.querySelectorAll("[data-fmt]").forEach(btn => {
@@ -862,7 +862,7 @@ function renderResults() {
       resultsPhase.querySelectorAll("[data-fmt]").forEach(b => b.classList.remove("active"));
       btn.classList.add("active"); state.exportFormat = btn.dataset.fmt;
       $("#dlBox").classList.add("hidden");
-      $("#exportBtn").textContent = `Prepare ${state.exportFormat === "xlsx" ? "Excel" : state.exportFormat === "csv" ? "CSV" : "HTML"}`;
+      $("#exportBtn").textContent = `Prepare ${({xlsx:"Excel",docx:"Word",csv:"CSV",html:"HTML"})[state.exportFormat]}`;
     });
   });
   $("#exportBtn").addEventListener("click", handleExport);
@@ -896,6 +896,41 @@ function handleExport() {
     });
     h += `</table></body></html>`;
     href = `data:application/vnd.ms-excel;base64,${toBase64(h)}`; filename = `${r.title}.xls`;
+  } else if (state.exportFormat === "docx") {
+    // Word HTML format — supports embedded base64 images
+    const rdct = s => s.replace(/\[REDACTED[^\]]*\]/g, '<span style="background:#fff3cd;color:#856404;font-weight:bold;padding:2px 4px">$&</span>');
+    let h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]--><style>body{font-family:Calibri,sans-serif;font-size:11pt;line-height:1.5;color:#222}h1{font-size:18pt;border-bottom:2px solid #333;padding-bottom:6px}h2{font-size:14pt;margin-top:24px;color:#1a1a2e;background:#e8e6f0;padding:6px 12px;border-left:4px solid #6c3ce0}h3{font-size:12pt;margin-top:16px;color:#333;border-bottom:1px solid #ddd;padding-bottom:3px}table{border-collapse:collapse;width:100%;margin:12px 0}th{background:#2d3436;color:#fff;padding:6px 10px;text-align:left;font-size:10pt}td{padding:6px 10px;border:1px solid #ccc;font-size:10pt}tr:nth-child(even){background:#f5f5f5}p{margin:6px 0}.page-break{page-break-before:always}</style></head><body>`;
+    h += `<h1>${r.title}</h1>`;
+    if (r.pageContents && r.pageContents.length) {
+      r.pageContents.forEach((pc, pi) => {
+        if (pi > 0) h += `<div class="page-break"></div>`;
+        if (r.pageContents.length > 1) h += `<h2>Page ${pi + 1}</h2>`;
+        pc.paragraphs.forEach(p => {
+          const text = rdct(p.text);
+          if (p.isHeading) h += `<h3>${text}</h3>`;
+          else h += `<p>${text}</p>`;
+        });
+        pc.tables.forEach(t => {
+          h += `<table><tr>${t.headers.map(hd => `<th>${rdct(hd)}</th>`).join('')}</tr>`;
+          t.rows.forEach(row => { h += `<tr>${row.map(c => `<td>${rdct(String(c ?? ''))}</td>`).join('')}</tr>`; });
+          h += `</table>`;
+        });
+        if (pc.image) h += `<p><img src="${pc.image}" style="max-width:100%" alt="Page ${pi + 1}"></p>`;
+      });
+    } else {
+      r.sheets.forEach(s => {
+        h += `<h2>${s.name}</h2>`;
+        if (s.type === "text" && s.textContent) { s.textContent.split("\n").forEach(p => { if (p.trim()) h += `<p>${rdct(p)}</p>`; }); }
+        else if (s.headers && s.rows) {
+          h += `<table><tr>${s.headers.map(hd => `<th>${hd}</th>`).join('')}</tr>`;
+          s.rows.forEach(row => { h += `<tr>${row.map(c => `<td>${rdct(String(c ?? ''))}</td>`).join('')}</tr>`; });
+          h += `</table>`;
+        }
+      });
+      if (r.pageImages && r.pageImages.length > 0) { r.pageImages.forEach((src, i) => { h += `<p><img src="${src}" style="max-width:100%" alt="Page ${i + 1}"></p>`; }); }
+    }
+    h += `</body></html>`;
+    href = `data:application/msword;base64,${toBase64(h)}`; filename = `${r.title}.doc`;
   } else if (state.exportFormat === "csv") {
     const csv = r.sheets.map(s => {
       const lines = [s.headers.map(escCSV).join(",")];
