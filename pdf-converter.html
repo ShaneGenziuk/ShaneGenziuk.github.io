@@ -690,6 +690,7 @@ async function processFile() {
     const allTextRows = [];
     let allTextContent = "";
     const tableSheets = [];
+    const pageContents = []; // per-page data for HTML export interleaving
 
     for (let i = 1; i <= numPages; i++) {
       processBtn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:10px"><span class="spinner"></span>Page ${i}/${numPages}...</span>`;
@@ -700,13 +701,14 @@ async function processFile() {
       const scale = 1.5, viewport = page.getViewport({ scale }), canvas = document.createElement("canvas");
       canvas.width = viewport.width; canvas.height = viewport.height;
       await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-      pageImages.push(canvas.toDataURL("image/png"));
+      const pageImg = canvas.toDataURL("image/png");
+      pageImages.push(pageImg);
 
       const items = textContent.items;
-      if (!items.length) continue;
+      if (!items.length) { pageContents.push({ paragraphs: [], tables: [], image: pageImg }); continue; }
 
       const lines = buildLines(items);
-      if (!lines.length) continue;
+      if (!lines.length) { pageContents.push({ paragraphs: [], tables: [], image: pageImg }); continue; }
 
       const bodyFont = getBodyFontSize(lines);
       fullText += lines.map(l => l.text).join("\n") + "\n\n";
@@ -714,15 +716,17 @@ async function processFile() {
       const { tables, textLines } = detectTableRegions(lines);
       // Collect lines from failed table regions so they aren't lost
       const recoveredLines = [];
+      const pageTables = [];
       tables.forEach(t => {
         const sheet = buildTableSheet(lines, t.start, t.end, i);
-        if (sheet) tableSheets.push(sheet);
+        if (sheet) { tableSheets.push(sheet); pageTables.push(sheet); }
         else for (let li = t.start; li <= t.end; li++) recoveredLines.push(lines[li]);
       });
       // Merge text lines + recovered table lines, sorted by y position
       const allText = textLines.concat(recoveredLines).sort((a, b) => b.y - a.y);
 
       const paragraphs = buildTextSections(allText, bodyFont, i);
+      pageContents.push({ paragraphs, tables: pageTables, image: pageImg });
       if (paragraphs.length) {
         // Add page separator for multi-page PDFs
         if (allTextRows.length > 0 && numPages > 1) {
@@ -752,9 +756,21 @@ async function processFile() {
     if (state.redactEnabled) {
       processBtn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:10px"><span class="spinner"></span>Redacting${nlp ? ' (NLP+patterns+context)' : ''}...</span>`;
       redactionStats = applyRedactions(fullText, sheets);
+      // Also redact pageContents for HTML export
+      const pcSheets = [];
+      pageContents.forEach(pc => {
+        pc.paragraphs.forEach(p => { pcSheets.push({ textContent: p.text }); });
+        pc.tables.forEach(t => pcSheets.push(t));
+      });
+      applyRedactions(fullText, pcSheets);
+      // Write back redacted paragraph text
+      let pci = 0;
+      pageContents.forEach(pc => {
+        pc.paragraphs.forEach(p => { p.text = pcSheets[pci].textContent; pci++; });
+      });
     }
 
-    state.result = { title: state.file.name.replace(/\.pdf$/i, ""), sheets, pageImages, redactionStats };
+    state.result = { title: state.file.name.replace(/\.pdf$/i, ""), sheets, pageImages, pageContents, redactionStats };
     renderResults();
   } catch (err) {
     console.error(err);
@@ -846,20 +862,39 @@ function handleExport() {
     }).join("\n\n");
     href = `data:text/csv;base64,${toBase64(csv)}`; filename = `${r.title}.csv`;
   } else {
-    let h = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${r.title}</title><style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6;color:#222}h1{font-size:24px;border-bottom:2px solid #333;padding-bottom:8px}h2{font-size:18px;margin-top:30px;color:#444}table{border-collapse:collapse;width:100%;margin:16px 0}th{background:#2d3436;color:#fff;padding:10px 12px;text-align:left}td{padding:8px 12px;border:1px solid #ddd}tr:nth-child(even){background:#f5f5f5}p{margin:8px 0}.redacted{background:#fff3cd;color:#856404;font-weight:bold;padding:2px 6px;border-radius:3px}.page-img{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:16px 0;box-shadow:0 2px 8px rgba(0,0,0,.1)}[contenteditable]{outline:none}@media print{body{margin:0}}</style></head><body contenteditable="true"><h1>${r.title}</h1>`;
-    r.sheets.forEach(s => {
-      h += `<h2>${s.name}</h2>`;
-      if (s.type === "text" && s.textContent) { s.textContent.split("\n").forEach(p => { if (p.trim()) h += `<p>${p.replace(/\[REDACTED[^\]]*\]/g, '<span class="redacted">$&</span>')}</p>`; }); }
-      else if (s.headers && s.rows) {
-        h += `<table><tr>${s.headers.map(hd => `<th>${hd}</th>`).join('')}</tr>`;
-        s.rows.forEach(row => { h += `<tr>${row.map(c => `<td>${String(c ?? '').replace(/\[REDACTED[^\]]*\]/g, '<span class="redacted">$&</span>')}</td>`).join('')}</tr>`; });
-        h += `</table>`;
-      }
-    });
-    // Append all page images
-    if (r.pageImages.length > 0) {
-      h += `<h2>Pages</h2>`;
-      r.pageImages.forEach((src, i) => { h += `<img class="page-img" src="${src}" alt="Page ${i + 1}">`; });
+    const rdct = s => s.replace(/\[REDACTED[^\]]*\]/g, '<span class="redacted">$&</span>');
+    let h = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${r.title}</title><style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6;color:#222}h1{font-size:24px;border-bottom:2px solid #333;padding-bottom:8px}h2{font-size:20px;margin-top:30px;color:#1a1a2e;background:#e8e6f0;padding:8px 14px;border-radius:6px;border-left:4px solid #6c3ce0}h3{font-size:16px;margin-top:20px;color:#333;border-bottom:1px solid #ddd;padding-bottom:4px}table{border-collapse:collapse;width:100%;margin:16px 0}th{background:#2d3436;color:#fff;padding:10px 12px;text-align:left}td{padding:8px 12px;border:1px solid #ddd}tr:nth-child(even){background:#f5f5f5}p{margin:8px 0}.redacted{background:#fff3cd;color:#856404;font-weight:bold;padding:2px 6px;border-radius:3px}.page-img{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:16px 0;box-shadow:0 2px 8px rgba(0,0,0,.1)}.page-divider{border:none;border-top:2px solid #e0e0e0;margin:30px 0}[contenteditable]{outline:none}@media print{body{margin:0}}</style></head><body contenteditable="true"><h1>${r.title}</h1>`;
+    // Interleave: for each page, output text + tables + page image
+    if (r.pageContents && r.pageContents.length) {
+      r.pageContents.forEach((pc, pi) => {
+        if (r.pageContents.length > 1) h += `${pi > 0 ? '<hr class="page-divider">' : ''}<h2>Page ${pi + 1}</h2>`;
+        // Text paragraphs with heading highlighting
+        pc.paragraphs.forEach(p => {
+          const text = rdct(p.text);
+          if (p.isHeading) h += `<h3>${text}</h3>`;
+          else h += `<p>${text}</p>`;
+        });
+        // Tables found on this page
+        pc.tables.forEach(t => {
+          h += `<table><tr>${t.headers.map(hd => `<th>${rdct(hd)}</th>`).join('')}</tr>`;
+          t.rows.forEach(row => { h += `<tr>${row.map(c => `<td>${rdct(String(c ?? ''))}</td>`).join('')}</tr>`; });
+          h += `</table>`;
+        });
+        // Page image inline
+        if (pc.image) h += `<img class="page-img" src="${pc.image}" alt="Page ${pi + 1}">`;
+      });
+    } else {
+      // Fallback if no pageContents (shouldn't happen)
+      r.sheets.forEach(s => {
+        h += `<h2>${s.name}</h2>`;
+        if (s.type === "text" && s.textContent) { s.textContent.split("\n").forEach(p => { if (p.trim()) h += `<p>${rdct(p)}</p>`; }); }
+        else if (s.headers && s.rows) {
+          h += `<table><tr>${s.headers.map(hd => `<th>${hd}</th>`).join('')}</tr>`;
+          s.rows.forEach(row => { h += `<tr>${row.map(c => `<td>${rdct(String(c ?? ''))}</td>`).join('')}</tr>`; });
+          h += `</table>`;
+        }
+      });
+      if (r.pageImages.length > 0) { r.pageImages.forEach((src, i) => { h += `<img class="page-img" src="${src}" alt="Page ${i + 1}">`; }); }
     }
     h += `</body></html>`;
     href = `data:text/html;base64,${toBase64(h)}`; filename = `${r.title}_editable.html`;
