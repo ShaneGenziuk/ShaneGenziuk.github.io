@@ -521,10 +521,9 @@ function buildLines(items) {
         const gap = item.x - (prev.x + prev.width);
         if (gap < item.fontSize * 0.8 && gap > -item.fontSize * 0.3) {
           // Determine if a space is needed between fragments
+          // Inter-word gaps are typically 0.2-0.25× font size; kerning is < 0.1×
           let needsSpace = gap > item.fontSize * 0.3;
-          if (!needsSpace && gap > 0.1) {
-            // Even tiny positive gaps often represent word boundaries in PDFs
-            // Check if previous text ends and next begins with word characters
+          if (!needsSpace && gap > item.fontSize * 0.15) {
             const prevEnd = prev.str.slice(-1);
             const nextStart = item.str.charAt(0);
             if (/\w/.test(prevEnd) && /\w/.test(nextStart)) needsSpace = true;
