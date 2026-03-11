@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Heading Detection Mockup - Before vs After</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #f0f0f0; padding: 30px; }
+.container { display: flex; gap: 30px; max-width: 1600px; margin: 0 auto; }
+.panel { flex: 1; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); overflow: hidden; }
+.panel-header { padding: 16px 24px; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+.panel-header.before { background: #fee; color: #c00; }
+.panel-header.after { background: #efe; color: #060; }
+.panel-body { padding: 30px; }
+
+/* Shared styles matching our export */
+.doc h1 { font-family: Georgia, serif; font-size: 24px; border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 20px; }
+.doc h2 { font-family: Georgia, serif; font-size: 20px; margin-top: 30px; color: #1a1a2e; background: #e8e6f0; padding: 8px 14px; border-radius: 6px; border-left: 4px solid #6c3ce0; margin-bottom: 16px; }
+.doc h3 { font-family: Georgia, serif; font-size: 16px; margin-top: 20px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 8px; }
+.doc p { font-family: Georgia, serif; margin: 8px 0; line-height: 1.6; color: #222; }
+.doc .page-divider { border: none; border-top: 2px solid #e0e0e0; margin: 30px 0; }
+
+/* Annotation badges */
+.badge { display: inline-block; font-size: 10px; font-family: system-ui; padding: 2px 6px; border-radius: 3px; margin-left: 8px; vertical-align: middle; }
+.badge.miss { background: #fee; color: #c00; border: 1px solid #fcc; }
+.badge.detected { background: #efe; color: #060; border: 1px solid #cec; }
+.badge.reason { background: #eef; color: #339; border: 1px solid #cce; font-style: italic; }
+
+.legend { max-width: 1600px; margin: 0 auto 20px; padding: 16px 24px; background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+.legend h2 { font-size: 18px; margin-bottom: 10px; }
+.legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; font-size: 13px; }
+.legend-item { display: flex; align-items: center; gap: 8px; }
+.legend-swatch { width: 20px; height: 20px; border-radius: 4px; border: 1px solid #ddd; }
+</style>
+</head>
+<body>
+
+<div class="legend">
+  <h2>Heading Detection — Current vs Improved</h2>
+  <div class="legend-grid">
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:#fee"></div>
+      <span><strong>Current:</strong> Only detects headings with font size &gt;1.2× body</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:#efe"></div>
+      <span><strong>Improved:</strong> Also detects bold fonts, ALL CAPS, and short standalone lines</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:#eef"></div>
+      <span><strong>Detection reasons:</strong> How the heading was identified</span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- BEFORE: Current detection -->
+<div class="panel">
+  <div class="panel-header before">Current — fontSize only</div>
+  <div class="panel-body doc">
+    <h1>OpenAI_Enterprise_FAQs</h1>
+    <h2>Page 1</h2>
+
+    <!-- These are all <p> because same font size as body -->
+    <p><strong>Crowe Global ChatGPT Enterprise FAQs</strong> <span class="badge miss">MISSED — bold, same size</span></p>
+    <p><strong>Pricing and Agreement Process</strong> <span class="badge miss">MISSED — bold, same size</span></p>
+    <p>Who is eligible to purchase under this pricing framework?</p>
+    <p>Any Crowe Global member firm or affiliate that remains an active member of Crowe Global in goodstanding, with a minimum of 25 ChatGPT Enterprise licenses.</p>
+    <p><strong>What pricing applies to my firm?</strong> <span class="badge miss">MISSED — bold question</span></p>
+    <p>Pricing is $26 per user per month. Additional discounts may apply based on the aggregate Crowe Global license count. Any per user pricing changes will be implemented at renewal if applicable.</p>
+
+    <hr class="page-divider">
+    <h2>Page 2</h2>
+
+    <p><strong>AGREEMENT AND IMPLEMENTATION</strong> <span class="badge miss">MISSED — ALL CAPS bold</span></p>
+    <p><strong>How does my firm sign up?</strong> <span class="badge miss">MISSED — bold question</span></p>
+    <p>Each firm signs an individual agreement directly with OpenAI. Crowe Global will facilitate introductions and provide the negotiated pricing framework.</p>
+    <p><strong>What is the minimum commitment?</strong> <span class="badge miss">MISSED — bold question</span></p>
+    <p>A minimum of 25 Enterprise licenses per firm with an annual commitment.</p>
+  </div>
+</div>
+
+<!-- AFTER: Improved detection -->
+<div class="panel">
+  <div class="panel-header after">Improved — bold + caps + font change</div>
+  <div class="panel-body doc">
+    <h1>OpenAI_Enterprise_FAQs</h1>
+    <h2>Page 1</h2>
+
+    <h3>Crowe Global ChatGPT Enterprise FAQs <span class="badge detected">DETECTED</span> <span class="badge reason">bold font</span></h3>
+    <h3>Pricing and Agreement Process <span class="badge detected">DETECTED</span> <span class="badge reason">bold font + short</span></h3>
+    <p>Who is eligible to purchase under this pricing framework?</p>
+    <p>Any Crowe Global member firm or affiliate that remains an active member of Crowe Global in goodstanding, with a minimum of 25 ChatGPT Enterprise licenses.</p>
+    <h3>What pricing applies to my firm? <span class="badge detected">DETECTED</span> <span class="badge reason">bold font + short</span></h3>
+    <p>Pricing is $26 per user per month. Additional discounts may apply based on the aggregate Crowe Global license count. Any per user pricing changes will be implemented at renewal if applicable.</p>
+
+    <hr class="page-divider">
+    <h2>Page 2</h2>
+
+    <h3>AGREEMENT AND IMPLEMENTATION <span class="badge detected">DETECTED</span> <span class="badge reason">ALL CAPS + bold</span></h3>
+    <h3>How does my firm sign up? <span class="badge detected">DETECTED</span> <span class="badge reason">bold font + short</span></h3>
+    <p>Each firm signs an individual agreement directly with OpenAI. Crowe Global will facilitate introductions and provide the negotiated pricing framework.</p>
+    <h3>What is the minimum commitment? <span class="badge detected">DETECTED</span> <span class="badge reason">bold font + short</span></h3>
+    <p>A minimum of 25 Enterprise licenses per firm with an annual commitment.</p>
+  </div>
+</div>
+
+</div>
+
+<div class="legend" style="margin-top: 24px;">
+  <h2>Proposed Detection Rules</h2>
+  <table style="width:100%; border-collapse: collapse; font-size: 14px;">
+    <tr style="background:#2d3436; color:#fff;">
+      <th style="padding:10px; text-align:left;">Rule</th>
+      <th style="padding:10px; text-align:left;">Condition</th>
+      <th style="padding:10px; text-align:left;">What it catches</th>
+    </tr>
+    <tr style="background:#f5f5f5;">
+      <td style="padding:8px; border:1px solid #ddd;"><strong>1. Large font</strong> (existing)</td>
+      <td style="padding:8px; border:1px solid #ddd;"><code>fontSize &gt; bodySize × 1.15</code> AND <code>length &lt; 100</code></td>
+      <td style="padding:8px; border:1px solid #ddd;">Title-sized headings</td>
+    </tr>
+    <tr>
+      <td style="padding:8px; border:1px solid #ddd;"><strong>2. Bold font</strong> (new)</td>
+      <td style="padding:8px; border:1px solid #ddd;"><code>fontName contains "Bold"</code> AND <code>length &lt; 100</code></td>
+      <td style="padding:8px; border:1px solid #ddd;">Most PDF headings — section titles, Q&A questions</td>
+    </tr>
+    <tr style="background:#f5f5f5;">
+      <td style="padding:8px; border:1px solid #ddd;"><strong>3. ALL CAPS</strong> (new)</td>
+      <td style="padding:8px; border:1px solid #ddd;"><code>text === text.toUpperCase()</code> AND <code>length 3–80</code> AND <code>has letters</code></td>
+      <td style="padding:8px; border:1px solid #ddd;">Section headers like "AGREEMENT AND IMPLEMENTATION"</td>
+    </tr>
+    <tr>
+      <td style="padding:8px; border:1px solid #ddd;"><strong>4. Font change + short</strong> (new)</td>
+      <td style="padding:8px; border:1px solid #ddd;"><code>fontName ≠ bodyFont</code> AND <code>length &lt; 80</code> AND <code>preceded by gap</code></td>
+      <td style="padding:8px; border:1px solid #ddd;">Italic or alternate-font headings</td>
+    </tr>
+  </table>
+</div>
+
+</body>
+</html>
