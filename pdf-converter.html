@@ -520,7 +520,16 @@ function buildLines(items) {
         const prev = merged[merged.length - 1];
         const gap = item.x - (prev.x + prev.width);
         if (gap < item.fontSize * 0.8 && gap > -item.fontSize * 0.3) {
-          prev.str += (gap > item.fontSize * 0.3 ? " " : "") + item.str;
+          // Determine if a space is needed between fragments
+          let needsSpace = gap > item.fontSize * 0.3;
+          if (!needsSpace && gap > 0.1) {
+            // Even tiny positive gaps often represent word boundaries in PDFs
+            // Check if previous text ends and next begins with word characters
+            const prevEnd = prev.str.slice(-1);
+            const nextStart = item.str.charAt(0);
+            if (/\w/.test(prevEnd) && /\w/.test(nextStart)) needsSpace = true;
+          }
+          prev.str += (needsSpace ? " " : "") + item.str;
           prev.width = item.x + item.width - prev.x;
           prev.fontSize = Math.max(prev.fontSize, item.fontSize); return;
         }
