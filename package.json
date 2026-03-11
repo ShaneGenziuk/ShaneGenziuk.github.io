@@ -1,0 +1,25 @@
+{
+  "name": "shanegenziuk.github.io",
+  "version": "1.0.0",
+  "description": "Page for Haiku Builder",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest --verbose"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:42865/git/ShaneGenziuk/ShaneGenziuk.github.io"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!@exodus)"
+    ]
+  },
+  "devDependencies": {
+    "jest": "^30.3.0",
+    "jsdom": "^24.1.3"
+  }
+}

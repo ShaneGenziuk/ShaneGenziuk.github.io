@@ -3,120 +3,171 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF Converter — Extract, Redact & Export</title>
+<title>PDF Converter (v2.2) — Extract, Redact & Export</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⬡</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{min-height:100vh;background:linear-gradient(145deg,#0a0a0f 0%,#12121f 40%,#1a1028 100%);color:#e8e6f0;font-family:'Crimson Pro',Georgia,serif}
-.wrap{max-width:760px;margin:0 auto;padding:48px 24px 80px}
-h1{font-size:32px;font-weight:300;letter-spacing:-.5px;color:#f0ecf8}
-.subtitle{color:#7a7590;font-size:17px;font-weight:300;line-height:1.5;margin-top:8px}
-.logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#6c3ce0,#a855f7);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 20px rgba(108,60,224,.4);flex-shrink:0}
-.header{display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:8px}
-.header-wrap{text-align:center;margin-bottom:40px}
-.glow-btn{background:linear-gradient(135deg,#6c3ce0,#a855f7);border:none;color:#fff;padding:14px 32px;border-radius:12px;font-family:'Crimson Pro',Georgia,serif;font-size:17px;font-weight:600;cursor:pointer;transition:all .3s;box-shadow:0 4px 20px rgba(108,60,224,.3);letter-spacing:.3px}
-.glow-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(108,60,224,.5)}
-.glow-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
-.secondary-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#c4b5fd;padding:12px 24px;border-radius:10px;font-family:'Crimson Pro',Georgia,serif;font-size:15px;font-weight:500;cursor:pointer;transition:all .25s}
-.secondary-btn:hover{background:rgba(255,255,255,.1);border-color:rgba(168,85,247,.4)}
-.dropzone{border:2px dashed rgba(255,255,255,.1);border-radius:20px;padding:52px 40px;text-align:center;cursor:pointer;background:rgba(255,255,255,.02);transition:all .3s;margin-bottom:24px}
-.dropzone.over{border-color:#a855f7;background:rgba(168,85,247,.06)}
-.redact-toggle{display:flex;align-items:center;gap:12px;cursor:pointer;padding:16px 20px;border-radius:14px;border:1.5px solid rgba(255,255,255,.08);background:rgba(255,255,255,.02);transition:all .25s;user-select:none;margin-bottom:12px}
-.redact-toggle:hover{border-color:rgba(251,191,36,.3)}
-.redact-toggle.on{border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.06)}
-.toggle-track{width:44px;height:24px;border-radius:12px;background:rgba(255,255,255,.12);position:relative;transition:all .25s;flex-shrink:0}
-.toggle-track.on{background:rgba(251,191,36,.5)}
-.toggle-knob{width:18px;height:18px;border-radius:9px;background:#fff;position:absolute;top:3px;left:3px;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+body{min-height:100vh;background:#f4f5f7;color:#2d3436;font-family:'Inter',sans-serif}
+
+/* ── TOP HEADER ── */
+.top-header{background:#1e272e;padding:20px 40px}
+.logo-text{font-size:28px;font-weight:700;color:#fff;letter-spacing:-.5px}
+.logo-text .version{font-size:14px;font-weight:400;color:#636e72}
+.logo-underline{width:48px;height:3px;background:#e74c3c;margin-top:4px;border-radius:2px}
+
+/* ── HERO ── */
+.hero{background:#2d3436;padding:48px 40px 56px;color:#fff}
+.hero h1{font-size:36px;font-weight:400;line-height:1.3;max-width:600px}
+.subtitle{font-size:17px;color:#b2bec3;margin-top:12px;max-width:550px;line-height:1.6}
+.hero-content{display:flex;align-items:flex-start;gap:48px;max-width:1100px;margin:0 auto}
+.hero-left{flex:1}
+.hero-right{flex:1;max-width:480px}
+
+/* ── DROPZONE ── */
+.dropzone{border:2px dashed rgba(255,255,255,.2);border-radius:12px;padding:44px 32px;text-align:center;cursor:pointer;background:rgba(255,255,255,.04);transition:all .3s}
+.dropzone.over{border-color:#e74c3c;background:rgba(231,76,60,.06)}
+.dropzone:hover{border-color:rgba(231,76,60,.5);background:rgba(231,76,60,.04)}
+
+/* ── CTA / BUTTONS ── */
+.glow-btn{display:inline-block;background:#e74c3c;color:#fff;border:none;padding:14px 32px;border-radius:28px;font-size:16px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'Inter',sans-serif}
+.glow-btn:hover{background:#c0392b}
+.glow-btn:disabled{opacity:.4;cursor:not-allowed}
+.secondary-btn{background:#fff;border:1px solid #ddd;color:#636e72;padding:12px 24px;border-radius:28px;font-family:'Inter',sans-serif;font-size:15px;font-weight:500;cursor:pointer;transition:all .25s}
+.secondary-btn:hover{border-color:#e74c3c;color:#e74c3c}
+
+/* ── CONTENT SECTION ── */
+.content-section{max-width:1100px;margin:0 auto;padding:40px}
+.section-title{font-size:22px;font-weight:700;color:#2d3436;margin-bottom:6px}
+.section-title-bar{width:40px;height:3px;background:#e74c3c;border-radius:2px;margin-bottom:20px}
+
+/* ── REDACT TOGGLE ── */
+.redact-toggle{display:flex;align-items:center;gap:14px;cursor:pointer;padding:18px 22px;border-radius:8px;border:1px solid #ddd;background:#fff;transition:all .25s;user-select:none;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.redact-toggle:hover{border-color:#e74c3c}
+.redact-toggle.on{border-color:#e74c3c;background:#fef5f4}
+.toggle-track{width:44px;height:24px;border-radius:12px;background:#ccc;position:relative;transition:all .25s;flex-shrink:0}
+.toggle-track.on{background:#e74c3c}
+.toggle-knob{width:18px;height:18px;border-radius:9px;background:#fff;position:absolute;top:3px;left:3px;transition:all .25s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .toggle-knob.on{left:23px}
-.toggle-label{font-size:17px;font-weight:500;color:#a09cb5}
-.toggle-label.on{color:#fbbf24}
-.group-box{border:1px solid rgba(255,255,255,.08);border-radius:12px;margin-bottom:10px;overflow:hidden;background:rgba(255,255,255,.015)}
+.toggle-label{font-size:16px;font-weight:600;color:#2d3436}
+.toggle-label.on{color:#e74c3c}
+
+/* ── REDACTION PANEL ── */
+.group-box{border:1px solid #e0e0e0;border-radius:8px;margin-bottom:10px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .group-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;user-select:none;transition:background .2s}
-.group-header:hover{background:rgba(255,255,255,.03)}
-.group-title{font-size:15px;font-weight:500;color:#d0cbe0}
-.group-count{font-size:11px;color:#6b6580;font-family:'JetBrains Mono',monospace;margin-left:8px}
-.group-arrow{font-size:12px;color:#6b6580;transition:transform .2s;display:inline-block}
+.group-header:hover{background:#f8f9fa}
+.group-title{font-size:15px;font-weight:600;color:#2d3436}
+.group-count{font-size:11px;color:#636e72;font-family:'JetBrains Mono',monospace;margin-left:8px}
+.group-arrow{font-size:12px;color:#636e72;transition:transform .2s;display:inline-block}
 .group-arrow.collapsed{transform:rotate(-90deg)}
 .group-items{display:flex;flex-wrap:wrap;gap:6px;padding:4px 16px 14px}
-.sel-all{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);background:transparent;cursor:pointer;transition:all .2s;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8a85a0}
-.sel-all:hover{border-color:rgba(168,85,247,.4);color:#c4b5fd}
-.sel-all.all{border-color:#a855f7;background:rgba(168,85,247,.15);color:#d8b4fe}
-.sel-all.some{border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.08);color:#c4b5fd}
-.item-chip{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:transparent;cursor:pointer;transition:all .2s;user-select:none;min-width:160px;flex:1 1 auto;max-width:calc(33.33% - 4px)}
-.item-chip:hover{border-color:rgba(251,191,36,.25);background:rgba(255,255,255,.02)}
-.item-chip.on{border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.06)}
-.item-chip .label{font-size:13px;color:#8a85a0;font-weight:400}
-.item-chip.on .label{color:#e8d5a0;font-weight:500}
-.chk{width:16px;height:16px;border-radius:4px;border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:10px;transition:all .2s;flex-shrink:0}
-.chk.on{border-color:#a855f7;background:#a855f7;color:#fff}
-.banner{border-radius:14px;padding:16px 22px;margin-bottom:12px;display:flex;align-items:center;gap:12px}
-.banner-success{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2)}
-.banner-redact{background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2)}
-.section-box{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:14px;margin-bottom:20px;overflow:hidden}
-.section-header{padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px}
-.badge{font-size:11px;font-family:'JetBrains Mono',monospace;background:rgba(168,85,247,.15);color:#c4b5fd;padding:3px 8px;border-radius:6px;font-weight:500}
+.sel-all{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;border:1px solid #ddd;background:transparent;cursor:pointer;transition:all .2s;font-family:'JetBrains Mono',monospace;font-size:11px;color:#636e72}
+.sel-all:hover{border-color:#e74c3c;color:#e74c3c}
+.sel-all.all{border-color:#e74c3c;background:rgba(231,76,60,.08);color:#e74c3c}
+.sel-all.some{border-color:rgba(231,76,60,.4);background:rgba(231,76,60,.04);color:#e74c3c}
+.item-chip{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;border:1px solid #e8e8e8;background:#fff;cursor:pointer;transition:all .2s;user-select:none;min-width:160px;flex:1 1 auto;max-width:calc(33.33% - 4px)}
+.item-chip:hover{border-color:rgba(231,76,60,.3);background:#fef5f4}
+.item-chip.on{border-color:rgba(231,76,60,.4);background:#fef5f4}
+.item-chip .label{font-size:13px;color:#636e72;font-weight:400}
+.item-chip.on .label{color:#c0392b;font-weight:500}
+.chk{width:16px;height:16px;border-radius:4px;border:1.5px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:10px;transition:all .2s;flex-shrink:0}
+.chk.on{border-color:#e74c3c;background:#e74c3c;color:#fff}
+
+/* ── BANNERS ── */
+.banner{border-radius:8px;padding:16px 22px;margin-bottom:12px;display:flex;align-items:center;gap:12px}
+.banner-success{background:#ecfdf5;border:1px solid #a7f3d0}
+.banner-redact{background:#fef5f4;border:1px solid rgba(231,76,60,.2)}
+
+/* ── SECTION BOX ── */
+.section-box{background:#fff;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:20px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.section-header{padding:12px 18px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px}
+.badge{font-size:11px;font-family:'JetBrains Mono',monospace;background:rgba(231,76,60,.1);color:#e74c3c;padding:3px 8px;border-radius:6px;font-weight:500}
+
+/* ── PREVIEW TABLE ── */
 .preview-table{width:100%;border-collapse:collapse;font-size:13px}
-.preview-table th{background:rgba(168,85,247,.15);color:#d8b4fe;padding:10px 14px;text-align:left;font-weight:600;font-family:'JetBrains Mono',monospace;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
-.preview-table td{padding:9px 14px;border-bottom:1px solid rgba(255,255,255,.05);color:#b8b3c8;font-family:'JetBrains Mono',monospace;font-size:12px}
-.preview-table tr:hover td{background:rgba(255,255,255,.03)}
-.export-box{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:24px;margin-top:8px}
-.format-chip{padding:10px 20px;border-radius:10px;border:1.5px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);color:#a09cb5;font-family:'Crimson Pro',Georgia,serif;font-size:15px;cursor:pointer;transition:all .25s;font-weight:500}
-.format-chip.active{border-color:#a855f7;background:rgba(168,85,247,.12);color:#d8b4fe;box-shadow:0 0 16px rgba(168,85,247,.15)}
-.format-chip:hover:not(.active){border-color:rgba(255,255,255,.25);color:#c4b5fd}
-.dl-link-box{margin-top:16px;padding:14px 20px;background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.25);border-radius:12px;display:flex;align-items:center;gap:12px}
-.dl-link{color:#d8b4fe;font-weight:600;font-size:16px;text-decoration:underline;text-underline-offset:3px}
-.error-msg{color:#f87171;font-size:14px;text-align:center;margin-bottom:16px;padding:10px 16px;background:rgba(248,113,113,.08);border-radius:10px}
-.redacted-tag{background:#fbbf24;color:#78350f;padding:1px 5px;border-radius:3px;font-weight:600;font-size:11px;font-family:'JetBrains Mono',monospace}
-.page-thumb{height:100px;border-radius:6px;border:1px solid rgba(255,255,255,.1);flex-shrink:0}
+.preview-table th{background:#f8f9fa;color:#636e72;padding:10px 14px;text-align:left;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:12px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #e74c3c}
+.preview-table td{padding:9px 14px;border-bottom:1px solid #eee;color:#636e72;font-family:'JetBrains Mono',monospace;font-size:12px}
+.preview-table tr:hover td{background:#fafafa}
+
+/* ── EXPORT ── */
+.export-box{background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:24px;margin-top:8px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.format-chip{padding:10px 20px;border-radius:6px;border:1px solid #ddd;background:#fff;color:#636e72;font-family:'Inter',sans-serif;font-size:15px;cursor:pointer;transition:all .25s;font-weight:500}
+.format-chip.active{border-color:#e74c3c;background:#fef5f4;color:#e74c3c;font-weight:600}
+.format-chip:hover:not(.active){border-color:#aaa;color:#2d3436}
+.dl-link-box{margin-top:16px;padding:14px 20px;background:#fef5f4;border:1px solid rgba(231,76,60,.2);border-radius:8px;display:flex;align-items:center;gap:12px}
+.dl-link{color:#e74c3c;font-weight:600;font-size:16px;text-decoration:underline;text-underline-offset:3px}
+
+/* ── MISC ── */
+.error-msg{color:#e74c3c;font-size:14px;text-align:center;margin-bottom:16px;padding:10px 16px;background:#fef5f4;border:1px solid rgba(231,76,60,.2);border-radius:8px}
+.redacted-tag{background:#e74c3c;color:#fff;padding:1px 5px;border-radius:3px;font-weight:600;font-size:11px;font-family:'JetBrains Mono',monospace}
+.page-thumb{height:100px;border-radius:6px;border:1px solid #ddd;flex-shrink:0}
 .method-tag{display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace;margin-left:3px;vertical-align:middle}
-.method-nlp{background:rgba(99,102,241,.2);color:#a5b4fc}
-.method-ctx{background:rgba(52,211,153,.2);color:#6ee7b7}
-.method-rgx{background:rgba(251,191,36,.2);color:#fbbf24}
+.method-nlp{background:rgba(99,102,241,.15);color:#6366f1}
+.method-ctx{background:rgba(16,185,129,.15);color:#059669}
+.method-rgx{background:rgba(231,76,60,.12);color:#e74c3c}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .fade-up{animation:fadeUp .5s ease forwards}
 .spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
 .mono{font-family:'JetBrains Mono',monospace}
 .hidden{display:none}
+@media(max-width:768px){.hero-content{flex-direction:column}.hero-right{max-width:100%}.hero{padding:32px 20px 40px}.content-section{padding:24px 20px}}
 </style>
 </head>
 <body>
-<div class="wrap" id="app">
-  <div class="header-wrap">
-    <div class="header"><div class="logo">⬡</div><h1>PDF Converter</h1></div>
-    <p class="subtitle">Extract text &amp; images, auto-redact sensitive data, export as Excel or editable document</p>
-    <p style="font-size:12px;color:#4ade80;margin-top:8px;font-family:'JetBrains Mono',monospace">✦ Runs entirely in your browser — no data leaves your device</p>
-    <p style="font-size:11px;color:#6b6580;margin-top:4px;font-family:'JetBrains Mono',monospace" id="nlpStatus">Loading NLP engine...</p>
+<div id="app">
+  <!-- HEADER -->
+  <div class="top-header">
+    <div class="logo-text">PDF Converter <span class="version">(v2.2)</span></div>
+    <div class="logo-underline"></div>
   </div>
+
   <div id="uploadPhase">
-    <div class="dropzone" id="dropzone">
-      <div style="font-size:48px;margin-bottom:16px;opacity:.6" id="dropIcon">📁</div>
-      <div id="dropHint">
-        <p style="font-size:18px;color:#a09cb5">Drop your PDF here or click to browse</p>
-        <p style="font-size:14px;color:#5a5670;margin-top:6px">Supports any PDF with text, tables, or images</p>
-      </div>
-      <div id="dropFile" class="hidden">
-        <p style="font-size:18px;color:#d8b4fe;font-weight:500" id="fileName"></p>
-        <p style="font-size:14px;color:#7a7590;margin-top:6px" id="fileSize"></p>
+    <!-- HERO -->
+    <div class="hero">
+      <div class="hero-content">
+        <div class="hero-left">
+          <h1>Extract, redact &amp; export your PDFs</h1>
+          <p class="subtitle">Auto-detect sensitive data with NLP, redact with one click, and export to Word, Excel, CSV or editable HTML.</p>
+          <button class="glow-btn" id="processBtn" disabled>Extract &amp; Convert</button>
+          <p style="font-size:12px;color:#4ade80;margin-top:16px;font-family:'JetBrains Mono',monospace">&#10022; Runs entirely in your browser — no data leaves your device</p>
+          <p style="font-size:11px;color:#636e72;margin-top:4px;font-family:'JetBrains Mono',monospace" id="nlpStatus">Loading NLP engine...</p>
+        </div>
+        <div class="hero-right">
+          <div class="dropzone" id="dropzone">
+            <div style="font-size:40px;margin-bottom:12px;opacity:.6" id="dropIcon">📁</div>
+            <div id="dropHint">
+              <p style="font-size:16px;color:#dfe6e9">Drop your PDF here or click to browse</p>
+              <p style="font-size:13px;color:#636e72;margin-top:6px">Supports any PDF with text, tables, or images</p>
+            </div>
+            <div id="dropFile" class="hidden">
+              <p style="font-size:16px;color:#fff;font-weight:500" id="fileName"></p>
+              <p style="font-size:13px;color:#b2bec3;margin-top:6px" id="fileSize"></p>
+            </div>
+          </div>
+          <input type="file" id="fileInput" accept=".pdf" style="display:none">
+        </div>
       </div>
     </div>
-    <input type="file" id="fileInput" accept=".pdf" style="display:none">
-    <div class="redact-toggle" id="redactToggle">
-      <div class="toggle-track" id="toggleTrack"><div class="toggle-knob" id="toggleKnob"></div></div>
-      <div style="flex:1">
-        <p class="toggle-label" id="toggleLabel">🔒 Auto-Redact Sensitive Data</p>
-        <p style="font-size:13px;color:#6b6580;margin-top:2px">NLP + pattern-based redaction — detects names, places, organisations &amp; data patterns</p>
+
+    <!-- LIGHT CONTENT SECTION -->
+    <div class="content-section">
+      <div class="section-title">Options</div>
+      <div class="section-title-bar"></div>
+      <div class="redact-toggle" id="redactToggle">
+        <div class="toggle-track" id="toggleTrack"><div class="toggle-knob" id="toggleKnob"></div></div>
+        <div style="flex:1">
+          <p class="toggle-label" id="toggleLabel">Auto-Redact Sensitive Data</p>
+          <p style="font-size:13px;color:#636e72;margin-top:2px">NLP + pattern-based redaction — detects names, places, organisations &amp; data patterns</p>
+        </div>
+        <span class="mono" style="font-size:12px;color:#e74c3c" id="activeCount"></span>
       </div>
-      <span class="mono" style="font-size:12px;color:#a09060" id="activeCount"></span>
-    </div>
-    <div id="redactPanel" class="hidden"></div>
-    <div id="errorMsg" class="error-msg hidden"></div>
-    <div style="text-align:center;margin-top:8px">
-      <button class="glow-btn" id="processBtn" disabled>Extract &amp; Convert</button>
+      <div id="redactPanel" class="hidden"></div>
+      <div id="errorMsg" class="error-msg hidden"></div>
     </div>
   </div>
+
   <div id="resultsPhase" class="hidden"></div>
 </div>
 <script type="module">
@@ -141,7 +192,7 @@ const nlpReady = new Promise(resolve => {
   };
   s.onerror = () => {
     document.getElementById("nlpStatus").textContent = "⚠ NLP unavailable — using pattern matching only";
-    document.getElementById("nlpStatus").style.color = "#fbbf24";
+    document.getElementById("nlpStatus").style.color = "#e74c3c";
     resolve();
   };
   document.head.appendChild(s);
@@ -327,7 +378,7 @@ function buildRedactPanel() {
   REDACTION_GROUPS.forEach(group => {
     const onCount = group.items.filter(i => state.redactState[i.id]).length;
     const gs = onCount === 0 ? "none" : onCount === group.items.length ? "all" : "some";
-    html += `<div class="group-box" data-group="${group.id}"><div class="group-header"><div style="display:flex;align-items:center;gap:10px" data-collapse="${group.id}"><span class="group-arrow" id="arrow-${group.id}">▾</span><span class="group-title">${group.label}</span><span class="group-count" id="gcount-${group.id}">${onCount}/${group.items.length}</span></div><button class="sel-all ${gs}" data-selall="${group.id}" id="selall-${group.id}"><span class="chk ${gs==='all'?'on':''}" id="selchk-${group.id}" ${gs==='some'?'style="border-color:#a855f7;background:rgba(168,85,247,.4)"':''}>${gs==='all'?'✓':gs==='some'?'–':''}</span>Select all</button></div><div class="group-items" id="gitems-${group.id}">`;
+    html += `<div class="group-box" data-group="${group.id}"><div class="group-header"><div style="display:flex;align-items:center;gap:10px" data-collapse="${group.id}"><span class="group-arrow" id="arrow-${group.id}">▾</span><span class="group-title">${group.label}</span><span class="group-count" id="gcount-${group.id}">${onCount}/${group.items.length}</span></div><button class="sel-all ${gs}" data-selall="${group.id}" id="selall-${group.id}"><span class="chk ${gs==='all'?'on':''}" id="selchk-${group.id}" ${gs==='some'?'style="border-color:#e74c3c;background:rgba(231,76,60,.4)"':''}>${gs==='all'?'✓':gs==='some'?'–':''}</span>Select all</button></div><div class="group-items" id="gitems-${group.id}">`;
     group.items.forEach(item => {
       const m = [];
       if (item.nlpExtract) m.push('<span class="method-tag method-nlp">NLP</span>');
@@ -337,8 +388,8 @@ function buildRedactPanel() {
     });
     html += `</div></div>`;
   });
-  html += `<div class="group-box"><div class="group-header" data-item="custom_kw_toggle"><div style="display:flex;align-items:center;gap:10px"><div class="chk" id="ichk-custom_kw"></div><span class="group-title">Custom Keywords</span></div><span class="mono" style="font-size:11px;color:#6b6580">Your own terms</span></div><div id="customKwBox" class="hidden" style="padding:4px 16px 14px"><input type="text" id="customKwInput" value="" placeholder="Enter keywords separated by commas" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(251,191,36,.2);background:rgba(0,0,0,.3);color:#e8e6f0;font-family:'JetBrains Mono',monospace;font-size:12px;outline:none"></div></div>`;
-  html += `<div style="display:flex;gap:12px;padding:8px 4px;flex-wrap:wrap;align-items:center"><span style="font-size:11px;color:#6b6580">Detection:</span><span class="method-tag method-nlp">NLP</span><span style="font-size:11px;color:#6b6580">Language</span><span class="method-tag method-ctx">CTX</span><span style="font-size:11px;color:#6b6580">Labels</span><span class="method-tag method-rgx">RGX</span><span style="font-size:11px;color:#6b6580">Patterns</span></div>`;
+  html += `<div class="group-box"><div class="group-header" data-item="custom_kw_toggle"><div style="display:flex;align-items:center;gap:10px"><div class="chk" id="ichk-custom_kw"></div><span class="group-title">Custom Keywords</span></div><span class="mono" style="font-size:11px;color:#636e72">Your own terms</span></div><div id="customKwBox" class="hidden" style="padding:4px 16px 14px"><input type="text" id="customKwInput" value="" placeholder="Enter keywords separated by commas" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#2d3436;font-family:'JetBrains Mono',monospace;font-size:12px;outline:none"></div></div>`;
+  html += `<div style="display:flex;gap:12px;padding:8px 4px;flex-wrap:wrap;align-items:center"><span style="font-size:11px;color:#636e72">Detection:</span><span class="method-tag method-nlp">NLP</span><span style="font-size:11px;color:#636e72">Language</span><span class="method-tag method-ctx">CTX</span><span style="font-size:11px;color:#636e72">Labels</span><span class="method-tag method-rgx">RGX</span><span style="font-size:11px;color:#636e72">Patterns</span></div>`;
   redactPanel.innerHTML = html;
 
   redactPanel.addEventListener("click", e => {
@@ -359,7 +410,7 @@ function refreshGroupUI(gid) {
   $(`#gcount-${gid}`).textContent = `${onCount}/${group.items.length}`;
   const selBtn = $(`#selall-${gid}`); selBtn.className = `sel-all ${gs}`;
   const selChk = $(`#selchk-${gid}`); selChk.className = `chk ${gs==='all'?'on':''}`;
-  selChk.style = gs === 'some' ? 'border-color:#a855f7;background:rgba(168,85,247,.4)' : '';
+  selChk.style = gs === 'some' ? 'border-color:#e74c3c;background:rgba(231,76,60,.4)' : '';
   selChk.textContent = gs === 'all' ? '✓' : gs === 'some' ? '–' : '';
   group.items.forEach(item => { const chip = redactPanel.querySelector(`[data-item="${item.id}"]`); if (chip) { chip.classList.toggle("on", state.redactState[item.id]); const chk = $(`#ichk-${item.id}`); if (chk) { chk.classList.toggle("on", state.redactState[item.id]); chk.textContent = state.redactState[item.id] ? "✓" : ""; } } });
 }
@@ -828,33 +879,35 @@ async function processFile() {
 function renderResults() {
   const r = state.result;
   uploadPhase.classList.add("hidden"); resultsPhase.classList.remove("hidden");
-  let html = '<div class="fade-up">';
-  html += `<div class="banner banner-success"><span style="font-size:22px">✓</span><div><p style="color:#4ade80;font-weight:600;font-size:16px">Content extracted</p><p style="color:#6b7f6e;font-size:13px;margin-top:2px">${r.sheets.length} section${r.sheets.length !== 1 ? 's' : ''} · ${r.pageImages.length} page${r.pageImages.length !== 1 ? 's' : ''}</p></div></div>`;
+  let html = '<div class="content-section fade-up">';
+  html += '<div class="section-title">Results</div><div class="section-title-bar"></div>';
+  html += `<div class="banner banner-success"><span style="font-size:22px">✓</span><div><p style="color:#059669;font-weight:600;font-size:16px">Content extracted</p><p style="color:#636e72;font-size:13px;margin-top:2px">${r.sheets.length} section${r.sheets.length !== 1 ? 's' : ''} · ${r.pageImages.length} page${r.pageImages.length !== 1 ? 's' : ''}</p></div></div>`;
 
   if (r.redactionStats && r.redactionStats.total_redactions > 0) {
-    html += `<div class="banner banner-redact"><span style="font-size:22px">🔒</span><div style="flex:1"><p style="color:#fbbf24;font-weight:600;font-size:16px">${r.redactionStats.total_redactions} redaction${r.redactionStats.total_redactions !== 1 ? 's' : ''}</p><p style="color:#a09060;font-size:13px;margin-top:2px">${Object.entries(r.redactionStats.by_category).map(([k, v]) => `${k}: ${v}`).join(' · ')}</p></div></div>`;
+    html += `<div class="banner banner-redact"><span style="font-size:22px">🔒</span><div style="flex:1"><p style="color:#e74c3c;font-weight:600;font-size:16px">${r.redactionStats.total_redactions} redaction${r.redactionStats.total_redactions !== 1 ? 's' : ''}</p><p style="color:#636e72;font-size:13px;margin-top:2px">${Object.entries(r.redactionStats.by_category).map(([k, v]) => `${k}: ${v}`).join(' · ')}</p></div></div>`;
   } else if (r.redactionStats) {
-    html += `<div class="banner" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08)"><span style="font-size:22px">🔒</span><div><p style="color:#8a85a0;font-weight:500;font-size:15px">No redactable content detected</p></div></div>`;
+    html += `<div class="banner" style="background:#f8f9fa;border:1px solid #e0e0e0"><span style="font-size:22px">🔒</span><div><p style="color:#636e72;font-weight:500;font-size:15px">No redactable content detected</p></div></div>`;
   }
 
   r.sheets.forEach(sheet => {
-    html += `<div class="section-box"><div class="section-header"><span class="badge">${sheet.type === "table" ? "TABLE" : "TEXT"}</span><span style="font-size:15px;color:#d0cbe0;font-weight:500">${sheet.name}</span>${sheet.rows ? `<span style="font-size:12px;color:#6b6580;margin-left:auto">${sheet.rows.length} rows</span>` : ''}</div><div style="overflow-x:auto;max-height:260px">`;
+    html += `<div class="section-box"><div class="section-header"><span class="badge">${sheet.type === "table" ? "TABLE" : "TEXT"}</span><span style="font-size:15px;color:#2d3436;font-weight:500">${sheet.name}</span>${sheet.rows ? `<span style="font-size:12px;color:#636e72;margin-left:auto">${sheet.rows.length} rows</span>` : ''}</div><div style="overflow-x:auto;max-height:260px">`;
     if (sheet.headers && sheet.rows) {
       html += `<table class="preview-table"><thead><tr>${sheet.headers.map(h => `<th>${hlr(esc(h))}</th>`).join('')}</tr></thead><tbody>`;
       sheet.rows.slice(0, 10).forEach(row => { html += `<tr>${row.map(c => `<td>${hlr(esc(c))}</td>`).join('')}</tr>`; });
-      if (sheet.rows.length > 10) html += `<tr><td colspan="${sheet.headers.length}" style="text-align:center;color:#5a5670;font-style:italic;padding:12px">+ ${sheet.rows.length - 10} more rows</td></tr>`;
+      if (sheet.rows.length > 10) html += `<tr><td colspan="${sheet.headers.length}" style="text-align:center;color:#aaa;font-style:italic;padding:12px">+ ${sheet.rows.length - 10} more rows</td></tr>`;
       html += '</tbody></table>';
     } else if (sheet.textContent) {
-      html += `<div style="padding:14px 18px;color:#9a94b0;font-size:14px;line-height:1.7;max-height:200px;overflow:auto">${hlr(esc(sheet.textContent.substring(0, 600)))}${sheet.textContent.length > 600 ? '...' : ''}</div>`;
+      html += `<div style="padding:14px 18px;color:#636e72;font-size:14px;line-height:1.7;max-height:200px;overflow:auto">${hlr(esc(sheet.textContent.substring(0, 600)))}${sheet.textContent.length > 600 ? '...' : ''}</div>`;
     }
     html += '</div></div>';
   });
 
   if (r.pageImages.length > 0) {
-    html += `<div class="section-box" style="padding:16px 22px"><p style="font-size:14px;font-weight:600;color:#818cf8;margin-bottom:12px">🖼 Pages</p><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px">${r.pageImages.map((src, i) => `<img src="${src}" alt="Page ${i + 1}" class="page-thumb" title="Page ${i + 1}">`).join('')}</div></div>`;
+    html += `<div class="section-box" style="padding:16px 22px"><p style="font-size:14px;font-weight:600;color:#e74c3c;margin-bottom:12px">Pages</p><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px">${r.pageImages.map((src, i) => `<img src="${src}" alt="Page ${i + 1}" class="page-thumb" title="Page ${i + 1}">`).join('')}</div></div>`;
   }
 
-  html += `<div class="export-box"><p class="mono" style="font-size:14px;color:#7a7590;margin-bottom:14px;font-weight:500;text-transform:uppercase;letter-spacing:1px">Export as</p><div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap"><button class="format-chip active" data-fmt="xlsx">📊 Excel (.xls)</button><button class="format-chip" data-fmt="docx">📝 Word (.doc)</button><button class="format-chip" data-fmt="csv">📋 CSV</button><button class="format-chip" data-fmt="html">✏️ Editable HTML</button></div><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="glow-btn" id="exportBtn">Prepare Excel</button><button class="secondary-btn" id="resetBtn">Start over</button></div><div id="dlBox" class="dl-link-box hidden"><span style="font-size:20px">⬇</span><a id="dlLink" class="dl-link" href="#" download="">Download</a></div></div></div>`;
+  html += '<div class="section-title" style="margin-top:24px">Export</div><div class="section-title-bar"></div>';
+  html += `<div class="export-box"><p style="font-size:14px;font-weight:600;color:#2d3436;margin-bottom:14px">Choose format</p><div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap"><button class="format-chip active" data-fmt="xlsx">Excel (.xls)</button><button class="format-chip" data-fmt="docx">Word (.doc)</button><button class="format-chip" data-fmt="csv">CSV</button><button class="format-chip" data-fmt="html">Editable HTML</button></div><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="glow-btn" id="exportBtn">Prepare Excel</button><button class="secondary-btn" id="resetBtn">Start over</button></div><div id="dlBox" class="dl-link-box hidden"><span style="font-size:20px">⬇</span><a id="dlLink" class="dl-link" href="#" download="">Download</a></div></div></div>`;
 
   resultsPhase.innerHTML = html;
   resultsPhase.querySelectorAll("[data-fmt]").forEach(btn => {
@@ -899,7 +952,7 @@ function handleExport() {
   } else if (state.exportFormat === "docx") {
     // Word HTML format — supports embedded base64 images
     const rdct = s => s.replace(/\[REDACTED[^\]]*\]/g, '<span style="background:#fff3cd;color:#856404;font-weight:bold;padding:2px 4px">$&</span>');
-    let h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]--><style>body{font-family:Calibri,sans-serif;font-size:11pt;line-height:1.5;color:#222}h1{font-size:18pt;border-bottom:2px solid #333;padding-bottom:6px}h2{font-size:14pt;margin-top:24px;color:#1a1a2e;background:#e8e6f0;padding:6px 12px;border-left:4px solid #6c3ce0}h3{font-size:12pt;margin-top:16px;color:#333;border-bottom:1px solid #ddd;padding-bottom:3px}table{border-collapse:collapse;width:100%;margin:12px 0}th{background:#2d3436;color:#fff;padding:6px 10px;text-align:left;font-size:10pt}td{padding:6px 10px;border:1px solid #ccc;font-size:10pt}tr:nth-child(even){background:#f5f5f5}p{margin:6px 0}.page-break{page-break-before:always}</style></head><body>`;
+    let h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]--><style>body{font-family:Calibri,sans-serif;font-size:11pt;line-height:1.5;color:#222}h1{font-size:18pt;border-bottom:2px solid #333;padding-bottom:6px}h2{font-size:14pt;margin-top:24px;color:#1e272e;background:#f4f5f7;padding:6px 12px;border-left:4px solid #e74c3c}h3{font-size:12pt;margin-top:16px;color:#333;border-bottom:1px solid #ddd;padding-bottom:3px}table{border-collapse:collapse;width:100%;margin:12px 0}th{background:#2d3436;color:#fff;padding:6px 10px;text-align:left;font-size:10pt}td{padding:6px 10px;border:1px solid #ccc;font-size:10pt}tr:nth-child(even){background:#f5f5f5}p{margin:6px 0}.page-break{page-break-before:always}</style></head><body>`;
     h += `<h1>${r.title}</h1>`;
     if (r.pageContents && r.pageContents.length) {
       r.pageContents.forEach((pc, pi) => {
@@ -940,7 +993,7 @@ function handleExport() {
     href = `data:text/csv;base64,${toBase64(csv)}`; filename = `${r.title}.csv`;
   } else {
     const rdct = s => s.replace(/\[REDACTED[^\]]*\]/g, '<span class="redacted">$&</span>');
-    let h = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${r.title}</title><style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6;color:#222}h1{font-size:24px;border-bottom:2px solid #333;padding-bottom:8px}h2{font-size:20px;margin-top:30px;color:#1a1a2e;background:#e8e6f0;padding:8px 14px;border-radius:6px;border-left:4px solid #6c3ce0}h3{font-size:16px;margin-top:20px;color:#333;border-bottom:1px solid #ddd;padding-bottom:4px}table{border-collapse:collapse;width:100%;margin:16px 0}th{background:#2d3436;color:#fff;padding:10px 12px;text-align:left}td{padding:8px 12px;border:1px solid #ddd}tr:nth-child(even){background:#f5f5f5}p{margin:8px 0}.redacted{background:#fff3cd;color:#856404;font-weight:bold;padding:2px 6px;border-radius:3px}.page-img{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:16px 0;box-shadow:0 2px 8px rgba(0,0,0,.1)}.page-divider{border:none;border-top:2px solid #e0e0e0;margin:30px 0}[contenteditable]{outline:none}@media print{body{margin:0}}</style></head><body contenteditable="true"><h1>${r.title}</h1>`;
+    let h = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${r.title}</title><style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6;color:#222}h1{font-size:24px;border-bottom:2px solid #333;padding-bottom:8px}h2{font-size:20px;margin-top:30px;color:#1e272e;background:#f4f5f7;padding:8px 14px;border-radius:6px;border-left:4px solid #e74c3c}h3{font-size:16px;margin-top:20px;color:#333;border-bottom:1px solid #ddd;padding-bottom:4px}table{border-collapse:collapse;width:100%;margin:16px 0}th{background:#2d3436;color:#fff;padding:10px 12px;text-align:left}td{padding:8px 12px;border:1px solid #ddd}tr:nth-child(even){background:#f5f5f5}p{margin:8px 0}.redacted{background:#fff3cd;color:#856404;font-weight:bold;padding:2px 6px;border-radius:3px}.page-img{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:16px 0;box-shadow:0 2px 8px rgba(0,0,0,.1)}.page-divider{border:none;border-top:2px solid #e0e0e0;margin:30px 0}[contenteditable]{outline:none}@media print{body{margin:0}}</style></head><body contenteditable="true"><h1>${r.title}</h1>`;
     // Interleave: for each page, output text + tables + page image
     if (r.pageContents && r.pageContents.length) {
       r.pageContents.forEach((pc, pi) => {
