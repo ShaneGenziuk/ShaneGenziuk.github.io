@@ -712,9 +712,17 @@ async function processFile() {
       fullText += lines.map(l => l.text).join("\n") + "\n\n";
 
       const { tables, textLines } = detectTableRegions(lines);
-      tables.forEach(t => { const sheet = buildTableSheet(lines, t.start, t.end, i); if (sheet) tableSheets.push(sheet); });
+      // Collect lines from failed table regions so they aren't lost
+      const recoveredLines = [];
+      tables.forEach(t => {
+        const sheet = buildTableSheet(lines, t.start, t.end, i);
+        if (sheet) tableSheets.push(sheet);
+        else for (let li = t.start; li <= t.end; li++) recoveredLines.push(lines[li]);
+      });
+      // Merge text lines + recovered table lines, sorted by y position
+      const allText = textLines.concat(recoveredLines).sort((a, b) => b.y - a.y);
 
-      const paragraphs = buildTextSections(textLines, bodyFont, i);
+      const paragraphs = buildTextSections(allText, bodyFont, i);
       if (paragraphs.length) {
         // Add page separator for multi-page PDFs
         if (allTextRows.length > 0 && numPages > 1) {
