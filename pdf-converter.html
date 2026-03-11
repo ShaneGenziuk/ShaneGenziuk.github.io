@@ -832,7 +832,8 @@ function handleExport() {
       x += `</Table></Worksheet>\n`;
     });
     x += `</Workbook>`;
-    href = `data:application/vnd.ms-excel;base64,${toBase64(x)}`; filename = `${r.title}.xls`;
+    const blob = new Blob([x], { type: "application/vnd.ms-excel" });
+    href = URL.createObjectURL(blob); filename = `${r.title}.xls`;
   } else if (state.exportFormat === "csv") {
     const csv = r.sheets.map(s => {
       const lines = [s.headers.map(escCSV).join(",")];
