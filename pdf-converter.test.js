@@ -98,7 +98,7 @@ describe("HTML structure", () => {
   test("NLP status element exists", () => {
     const nlp = doc.querySelector("#nlpStatus");
     expect(nlp).not.toBeNull();
-    expect(nlp.textContent).toContain("Loading NLP engine");
+    expect(nlp.textContent).toBe("");
   });
 
   test("error message element exists and is hidden", () => {
