@@ -147,8 +147,6 @@ const nlpReady = new Promise(resolve => {
   document.head.appendChild(s);
 });
 
-// Excel XML Spreadsheet helper (no external library needed)
-function escXml(v) { return String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
 // ============================================================
 // REDACTION CATEGORIES (4 groups, 33 items)
@@ -815,25 +813,23 @@ function handleExport() {
   let href, filename;
 
   if (state.exportFormat === "xlsx") {
-    // Excel 2003 XML Spreadsheet — no external library needed
-    let x = `<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n<Styles><Style ss:ID="hdr"><Font ss:Bold="1" ss:Color="#FFFFFF" ss:FontName="Calibri"/><Interior ss:Color="#2D3436" ss:Pattern="Solid"/><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style><Style ss:ID="cell"><Font ss:FontName="Calibri"/><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style><Style ss:ID="redact"><Font ss:Bold="1" ss:Color="#856404" ss:FontName="Calibri"/><Interior ss:Color="#FFF3CD" ss:Pattern="Solid"/><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style></Styles>\n`;
-    r.sheets.forEach(s => {
-      x += `<Worksheet ss:Name="${escXml(s.name.substring(0, 31))}"><Table>\n`;
-      // Column widths
-      if (s.headers) s.headers.forEach((h, ci) => {
-        let max = String(h).length;
-        if (s.rows) s.rows.forEach(row => { const len = String(row[ci] ?? "").length; if (len > max) max = len; });
-        x += `<Column ss:Width="${Math.min(Math.max(max * 7, 60), 500)}"/>\n`;
+    // HTML-based Excel format — single sheet to avoid Excel recovery artifacts
+    let h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Content</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>`;
+    h += `<table border="1">`;
+    r.sheets.forEach((s, si) => {
+      if (si > 0) {
+        // Add separator row between sheets
+        const colCount = s.headers ? s.headers.length : 2;
+        h += `<tr><td colspan="${colCount}" style="padding:12px;font-family:Calibri;font-weight:bold;background:#e2e8f0;font-size:14px">${s.name}</td></tr>`;
+      }
+      if (s.headers) h += `<tr>${s.headers.map(hd => `<th style="background:#2d3436;color:#fff;font-weight:bold;padding:8px;font-family:Calibri">${hd}</th>`).join('')}</tr>`;
+      if (s.rows) s.rows.forEach((row, ri) => {
+        const bg = ri % 2 === 0 ? "#f8f9fa" : "#fff";
+        h += `<tr>${row.map(c => { const v = String(c ?? ""); const isR = v.includes("[REDACTED"); return `<td style="padding:6px;font-family:Calibri;background:${isR ? '#fff3cd' : bg};${isR ? 'color:#856404;font-weight:bold;' : ''}">${v}</td>`; }).join('')}</tr>`;
       });
-      if (s.headers) { x += `<Row>${s.headers.map(h => `<Cell ss:StyleID="hdr"><Data ss:Type="String">${escXml(h)}</Data></Cell>`).join('')}</Row>\n`; }
-      if (s.rows) s.rows.forEach(row => {
-        x += `<Row>${row.map(c => { const v = String(c ?? ""); const style = v.includes("[REDACTED") ? "redact" : "cell"; const type = v && !isNaN(v) && v.trim() !== "" ? "Number" : "String"; return `<Cell ss:StyleID="${style}"><Data ss:Type="${type}">${escXml(v)}</Data></Cell>`; }).join('')}</Row>\n`;
-      });
-      x += `</Table></Worksheet>\n`;
     });
-    x += `</Workbook>`;
-    const blob = new Blob([x], { type: "application/vnd.ms-excel" });
-    href = URL.createObjectURL(blob); filename = `${r.title}.xls`;
+    h += `</table></body></html>`;
+    href = `data:application/vnd.ms-excel;base64,${toBase64(h)}`; filename = `${r.title}.xls`;
   } else if (state.exportFormat === "csv") {
     const csv = r.sheets.map(s => {
       const lines = [s.headers.map(escCSV).join(",")];
