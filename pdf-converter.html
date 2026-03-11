@@ -883,6 +883,7 @@ function handleExport() {
     // HTML-based Excel format — single sheet to avoid Excel recovery artifacts
     let h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Content</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>`;
     h += `<table border="1">`;
+    let pageImgIdx = 0;
     r.sheets.forEach((s, si) => {
       if (si > 0) {
         // Add separator row between sheets
@@ -893,8 +894,21 @@ function handleExport() {
       if (s.rows) s.rows.forEach((row, ri) => {
         const bg = ri % 2 === 0 ? "#f8f9fa" : "#fff";
         h += `<tr>${row.map(c => { const v = String(c ?? ""); const isR = v.includes("[REDACTED"); return `<td style="padding:6px;font-family:Calibri;background:${isR ? '#fff3cd' : bg};${isR ? 'color:#856404;font-weight:bold;' : ''}">${v}</td>`; }).join('')}</tr>`;
+        // Insert page image after page separator rows
+        const firstCell = String(row[0] ?? "");
+        if (firstCell === "" && String(row[1] ?? "").startsWith("--- Page") && r.pageImages && r.pageImages[pageImgIdx]) {
+          const colCount = s.headers ? s.headers.length : row.length;
+          h += `<tr><td colspan="${colCount}" style="padding:4px"><img src="${r.pageImages[pageImgIdx]}" style="max-width:600px;max-height:800px"></td></tr>`;
+          pageImgIdx++;
+        }
       });
     });
+    // If single-page PDF (no separators), add the image at the end
+    if (pageImgIdx === 0 && r.pageImages && r.pageImages.length > 0) {
+      r.pageImages.forEach(src => {
+        h += `<tr><td colspan="2" style="padding:4px"><img src="${src}" style="max-width:600px;max-height:800px"></td></tr>`;
+      });
+    }
     h += `</table></body></html>`;
     href = `data:application/vnd.ms-excel;base64,${toBase64(h)}`; filename = `${r.title}.xls`;
   } else if (state.exportFormat === "csv") {
