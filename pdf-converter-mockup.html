@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Converter — Design Mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;background:#1a1a2e;color:#e0e0e0;font-family:'Inter',sans-serif;display:flex;flex-direction:column}
+
+/* ── TOP HEADER BAR ── */
+.top-bar{height:56px;background:#16213e;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.top-bar-left{display:flex;align-items:center;gap:12px}
+.top-bar-logo{font-size:22px;font-weight:700;color:#fff;letter-spacing:-.5px}
+.top-bar-logo span{color:#e74c3c;font-weight:800}
+.top-bar-badge{font-size:11px;color:#8a8a9a;background:rgba(255,255,255,.06);padding:3px 10px;border-radius:4px;font-family:'JetBrains Mono',monospace}
+.top-bar-right{display:flex;align-items:center;gap:16px}
+.top-search{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:8px 14px;color:#ccc;font-size:13px;width:220px;font-family:'Inter',sans-serif}
+.top-search::placeholder{color:#666}
+.user-pill{display:flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;border-radius:20px;background:rgba(255,255,255,.06)}
+.user-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#e74c3c,#ff6b35);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#fff}
+.user-name{font-size:13px;color:#ccc}
+
+/* ── LAYOUT ── */
+.layout{display:flex;flex:1;overflow:hidden}
+
+/* ── LEFT SIDEBAR ── */
+.sidebar{width:64px;background:#0f1529;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:4px;border-right:1px solid rgba(255,255,255,.06);flex-shrink:0}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px;border-radius:8px;cursor:pointer;transition:all .2s;width:56px;border-left:3px solid transparent}
+.nav-item:hover{background:rgba(255,255,255,.04)}
+.nav-item.active{background:rgba(231,76,60,.08);border-left-color:#e74c3c}
+.nav-item .icon{font-size:20px;opacity:.5}
+.nav-item.active .icon{opacity:1}
+.nav-item .label{font-size:9px;color:#6b6580;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.nav-item.active .label{color:#e74c3c}
+
+/* ── MAIN CONTENT ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:auto}
+
+/* ── TAB BAR ── */
+.tab-bar{display:flex;align-items:center;gap:0;padding:0 24px;background:#16213e;border-bottom:1px solid rgba(255,255,255,.08)}
+.tab{padding:14px 20px;font-size:14px;color:#7a7a8a;cursor:pointer;border-bottom:2.5px solid transparent;transition:all .2s;font-weight:500}
+.tab:hover{color:#bbb}
+.tab.active{color:#e74c3c;border-bottom-color:#e74c3c}
+.tab-actions{margin-left:auto;display:flex;gap:8px}
+.tab-action-btn{padding:7px 16px;border-radius:6px;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif}
+.btn-outline{background:transparent;border:1px solid rgba(255,255,255,.15);color:#ccc}
+.btn-primary{background:#e74c3c;color:#fff}
+
+/* ── TOOLBAR ── */
+.toolbar{display:flex;align-items:center;gap:12px;padding:12px 24px;background:rgba(255,255,255,.02);border-bottom:1px solid rgba(255,255,255,.06)}
+.toolbar-label{font-size:13px;color:#8a8a9a;font-weight:500}
+.toolbar-select{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:6px 12px;color:#bbb;font-size:13px;font-family:'Inter',sans-serif}
+.toolbar-btn{width:32px;height:32px;border-radius:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#8a8a9a;font-size:14px;transition:all .2s}
+.toolbar-btn:hover{background:rgba(255,255,255,.08);color:#ddd}
+.toolbar-divider{width:1px;height:24px;background:rgba(255,255,255,.08)}
+.toolbar-search{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:6px 12px;color:#ccc;font-size:13px;width:180px;font-family:'Inter',sans-serif}
+.toolbar-search::placeholder{color:#555}
+.toolbar-stats{margin-left:auto;display:flex;gap:24px}
+.stat{display:flex;align-items:center;gap:6px}
+.stat-icon{font-size:16px;opacity:.5}
+.stat-label{font-size:11px;color:#6b6580;font-family:'JetBrains Mono',monospace}
+.stat-value{font-size:12px;color:#ccc;font-weight:600;font-family:'JetBrains Mono',monospace}
+
+/* ── CONTENT AREA ── */
+.content{flex:1;padding:24px;overflow:auto}
+
+/* ── UPLOAD ZONE (Findex-styled) ── */
+.dropzone{border:2px dashed rgba(255,255,255,.1);border-radius:10px;padding:48px 40px;text-align:center;cursor:pointer;background:rgba(255,255,255,.02);transition:all .3s;max-width:600px;margin:40px auto}
+.dropzone:hover{border-color:rgba(231,76,60,.3);background:rgba(231,76,60,.03)}
+.drop-icon{font-size:44px;margin-bottom:14px;opacity:.5}
+.drop-text{font-size:16px;color:#aaa}
+.drop-sub{font-size:13px;color:#555;margin-top:6px}
+
+/* ── TOGGLE ── */
+.redact-toggle{display:flex;align-items:center;gap:12px;cursor:pointer;padding:14px 18px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.02);transition:all .25s;user-select:none;max-width:600px;margin:12px auto}
+.redact-toggle:hover{border-color:rgba(231,76,60,.3)}
+.toggle-track{width:40px;height:22px;border-radius:11px;background:rgba(255,255,255,.12);position:relative;transition:all .25s;flex-shrink:0}
+.toggle-track.on{background:rgba(231,76,60,.5)}
+.toggle-knob{width:16px;height:16px;border-radius:8px;background:#fff;position:absolute;top:3px;left:3px;transition:all .25s}
+.toggle-knob.on{left:21px}
+.toggle-label{font-size:14px;color:#aaa;font-weight:500}
+
+/* ── PROCESS BUTTON ── */
+.action-center{text-align:center;margin-top:16px}
+.process-btn{background:#e74c3c;border:none;color:#fff;padding:12px 28px;border-radius:6px;font-family:'Inter',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;letter-spacing:.3px}
+.process-btn:hover{background:#c0392b}
+
+/* ── DATA GRID (results preview) ── */
+.grid-header{display:flex;align-items:center;padding:0 4px;background:rgba(255,255,255,.04);border-bottom:2px solid rgba(231,76,60,.3)}
+.grid-header span{flex:1;padding:10px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#999;font-family:'JetBrains Mono',monospace}
+.grid-row{display:flex;align-items:center;padding:0 4px;border-bottom:1px solid rgba(255,255,255,.04)}
+.grid-row:hover{background:rgba(255,255,255,.02)}
+.grid-row span{flex:1;padding:10px 14px;font-size:13px;color:#bbb;font-family:'JetBrains Mono',monospace}
+.grid-empty{text-align:center;padding:80px 20px;color:#666;font-size:14px}
+
+/* ── EXPORT BOX ── */
+.export-box{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:20px;margin-top:20px;max-width:600px;margin-left:auto;margin-right:auto}
+.format-chips{display:flex;gap:8px;flex-wrap:wrap}
+.format-chip{padding:8px 18px;border-radius:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);color:#999;font-size:13px;cursor:pointer;transition:all .2s;font-weight:500}
+.format-chip.active{border-color:#e74c3c;background:rgba(231,76,60,.1);color:#e74c3c}
+.format-chip:hover:not(.active){border-color:rgba(255,255,255,.2);color:#ccc}
+
+/* ── FOOTER STATUS ── */
+.status-bar{height:28px;background:#0f1529;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-top:1px solid rgba(255,255,255,.06);flex-shrink:0}
+.status-text{font-size:11px;color:#555;font-family:'JetBrains Mono',monospace}
+
+/* ── MOCKUP LABEL ── */
+.mockup-banner{background:#e74c3c;color:#fff;text-align:center;padding:8px;font-size:13px;font-weight:600;letter-spacing:.5px}
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">DESIGN MOCKUP — For review only, not functional</div>
+
+<!-- TOP HEADER -->
+<div class="top-bar">
+  <div class="top-bar-left">
+    <div class="top-bar-logo"><span>PDF</span> Converter</div>
+    <div class="top-bar-badge">v2.0</div>
+  </div>
+  <div class="top-bar-right">
+    <input class="top-search" placeholder="Search..." disabled>
+    <div class="user-pill">
+      <div class="user-avatar">SG</div>
+      <span class="user-name">Shane Genziuk</span>
+    </div>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="nav-item active">
+      <span class="icon">📄</span>
+      <span class="label">Convert</span>
+    </div>
+    <div class="nav-item">
+      <span class="icon">📁</span>
+      <span class="label">Files</span>
+    </div>
+    <div class="nav-item">
+      <span class="icon">🔒</span>
+      <span class="label">Redact</span>
+    </div>
+    <div class="nav-item">
+      <span class="icon">📊</span>
+      <span class="label">Export</span>
+    </div>
+    <div class="nav-item">
+      <span class="icon">⚙️</span>
+      <span class="label">Settings</span>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <div class="tab active">Upload</div>
+      <div class="tab">Results</div>
+      <div class="tab">Export</div>
+      <div class="tab-actions">
+        <button class="tab-action-btn btn-primary">+ New File</button>
+      </div>
+    </div>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <span class="toolbar-label">Filtered Lists:</span>
+      <select class="toolbar-select" disabled><option>View filters</option></select>
+      <div class="toolbar-divider"></div>
+      <div class="toolbar-btn" title="Delete">🗑</div>
+      <div class="toolbar-btn" title="Save">💾</div>
+      <div class="toolbar-btn" title="Refresh">🔄</div>
+      <div class="toolbar-btn" title="Download">⬇</div>
+      <div class="toolbar-divider"></div>
+      <input class="toolbar-search" placeholder="Search..." disabled>
+      <div class="toolbar-stats">
+        <div class="stat">
+          <span class="stat-label">Pages</span>
+          <span class="stat-value">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Entities</span>
+          <span class="stat-value">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Status</span>
+          <span class="stat-value" style="color:#4ade80">Ready</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content">
+
+      <!-- UPLOAD PHASE -->
+      <div class="dropzone">
+        <div class="drop-icon">📁</div>
+        <p class="drop-text">Drop your PDF here or click to browse</p>
+        <p class="drop-sub">Supports any PDF with text, tables, or images</p>
+      </div>
+
+      <div class="redact-toggle">
+        <div class="toggle-track"><div class="toggle-knob"></div></div>
+        <div style="flex:1">
+          <p class="toggle-label">Auto-Redact Sensitive Data</p>
+          <p style="font-size:12px;color:#555;margin-top:2px">NLP + pattern-based redaction</p>
+        </div>
+      </div>
+
+      <div class="action-center">
+        <button class="process-btn">Extract & Convert</button>
+      </div>
+
+      <!-- RESULTS PREVIEW (shown after processing) -->
+      <div style="margin-top:32px">
+        <div class="grid-header">
+          <span>PAGE</span>
+          <span>TEXT PREVIEW</span>
+          <span>ENTITIES</span>
+          <span>IMAGES</span>
+        </div>
+        <div class="grid-empty">No Rows To Show</div>
+      </div>
+
+      <!-- EXPORT -->
+      <div class="export-box">
+        <p style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px">Export Format</p>
+        <div class="format-chips">
+          <div class="format-chip active">Word (.doc)</div>
+          <div class="format-chip">Excel (.xls)</div>
+          <div class="format-chip">CSV</div>
+          <div class="format-chip">HTML</div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <span class="status-text">0 to 0 of 0</span>
+  <span class="status-text">Runs entirely in your browser — no data leaves your device</span>
+</div>
+
+</body>
+</html>
