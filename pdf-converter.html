@@ -484,6 +484,9 @@ function clusterValues(values, tolerance) {
 const BULLET_RE = /^[\u2022\u2023\u25E6\u2043\u2219\u25CF\u25CB\u25AA\u25AB\u2013\u2014\u2022\u00B7\u2219\u25CB\u25CF\u25E6\u25BA\u25B8\u2023\u002D\u2013\u2014]+\s*$/;
 const BULLET_PREFIX_RE = /^[\u2022\u2023\u25E6\u2043\u2219\u25CF\u25CB\u25AA\u25AB\u2013\u2014\u2022\u00B7\u2219\u25CB\u25CF\u25E6\u25BA\u25B8\u2023\u002D\u2013\u2014]+\s+/;
 const SUB_BULLET_RE = /^[o]\s*$/;
+// Dot-leader patterns (runs of dots/middle-dots used in TOC)
+const DOT_LEADER_RE = /^[.\u00B7\u2219\u2024\u2025\u2026\s]{3,}$/;
+const DOT_LEADER_INLINE_RE = /[.\u00B7\u2219\u2024]{4,}/g;
 
 // Build structured lines from raw pdf.js text items
 function buildLines(items) {
@@ -509,6 +512,8 @@ function buildLines(items) {
       const item = line.items[i];
       const isBullet = BULLET_RE.test(item.str.trim()) || SUB_BULLET_RE.test(item.str.trim());
       if (isBullet && i + 1 < line.items.length) continue;
+      // Strip dot-leader items (TOC dots between title and page number)
+      if (DOT_LEADER_RE.test(item.str.trim())) continue;
       const cleaned = { ...item };
       cleaned.str = cleaned.str.replace(BULLET_PREFIX_RE, "");
       debulleted.push(cleaned);
@@ -526,7 +531,7 @@ function buildLines(items) {
           if (!needsSpace && gap > item.fontSize * 0.15) {
             const prevEnd = prev.str.slice(-1);
             const nextStart = item.str.charAt(0);
-            if (/\w/.test(prevEnd) && /\w/.test(nextStart)) needsSpace = true;
+            if (/[\w&]/.test(prevEnd) && /[\w(]/.test(nextStart)) needsSpace = true;
           }
           prev.str += (needsSpace ? " " : "") + item.str;
           prev.width = item.x + item.width - prev.x;
@@ -536,7 +541,10 @@ function buildLines(items) {
       merged.push({ ...item });
     });
     line.items = merged;
-    line.text = merged.map(m => m.str).join("  ").replace(/\s{3,}/g, "  ").trim();
+    // Strip inline dot-leader runs, then clean up whitespace
+    merged.forEach(m => { m.str = m.str.replace(DOT_LEADER_INLINE_RE, " ").trim(); });
+    line.items = merged.filter(m => m.str);
+    line.text = line.items.map(m => m.str).join("  ").replace(/\s{3,}/g, "  ").trim();
     line.itemCount = merged.length;
     line.minX = merged.length ? merged[0].x : 0;
     line.maxX = merged.length ? merged[merged.length - 1].x + (merged[merged.length - 1].width || 0) : 0;
@@ -636,7 +644,7 @@ function buildTableSheet(lines, startIdx, endIdx, pageNum) {
 
   const cleanRows = mergedRows.map(row => keepCols.map(ci => {
     let val = row[ci] || "";
-    val = val.replace(BULLET_PREFIX_RE, "").replace(/^[o]\s+/, "").trim();
+    val = val.replace(BULLET_PREFIX_RE, "").replace(/^[o]\s+/, "").replace(DOT_LEADER_INLINE_RE, " ").replace(/\s{2,}/g, " ").trim();
     return val;
   }));
   if (cleanRows.length < 2) return null;
