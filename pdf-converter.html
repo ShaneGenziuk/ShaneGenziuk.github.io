@@ -709,8 +709,7 @@ function paragraphsToSheet(paragraphs, pageTitle) {
   if (!paragraphs.length) return null;
   const textContent = paragraphs.map(p => p.text).join("\n\n");
   const rows = paragraphs.map((p, i) => {
-    const prefix = p.isHeading ? "[H] " : "";
-    return [String(i + 1), prefix + p.text];
+    return [String(i + 1), p.text];
   });
   return { name: pageTitle.substring(0, 31), type: "text", headers: ["#", "Content"], rows, textContent };
 }
@@ -779,8 +778,7 @@ async function processFile() {
           allTextContent += "\n\n";
         }
         paragraphs.forEach(p => {
-          const prefix = p.isHeading ? "[H] " : "";
-          allTextRows.push([String(allTextRows.length + 1), prefix + p.text]);
+          allTextRows.push([String(allTextRows.length + 1), p.text]);
         });
         allTextContent += paragraphs.map(p => p.text).join("\n\n");
       }
