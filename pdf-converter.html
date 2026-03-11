@@ -191,8 +191,7 @@ const nlpReady = new Promise(resolve => {
     resolve();
   };
   s.onerror = () => {
-    document.getElementById("nlpStatus").textContent = "⚠ NLP unavailable — using pattern matching only";
-    document.getElementById("nlpStatus").style.color = "#e74c3c";
+    document.getElementById("nlpStatus").textContent = "";
     resolve();
   };
   document.head.appendChild(s);
