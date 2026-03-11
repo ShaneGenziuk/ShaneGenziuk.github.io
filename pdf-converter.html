@@ -80,30 +80,17 @@ h1{font-size:32px;font-weight:300;letter-spacing:-.5px;color:#f0ecf8}
 .spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
 .mono{font-family:'JetBrains Mono',monospace}
 .hidden{display:none}
-.mode-tabs{display:flex;gap:4px;background:rgba(255,255,255,.04);border-radius:12px;padding:4px;margin-bottom:20px}
-.mode-tab{flex:1;padding:10px 16px;border-radius:10px;border:none;background:transparent;color:#7a7590;font-family:'Crimson Pro',Georgia,serif;font-size:15px;font-weight:500;cursor:pointer;transition:all .25s;text-align:center}
-.mode-tab.active{background:linear-gradient(135deg,#6c3ce0,#a855f7);color:#fff;box-shadow:0 2px 12px rgba(108,60,224,.3)}
-.mode-tab:hover:not(.active){color:#c4b5fd;background:rgba(255,255,255,.04)}
-.url-input-wrap{display:flex;gap:10px;margin-bottom:24px}
-.url-input{flex:1;padding:14px 18px;border-radius:12px;border:1.5px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#e8e6f0;font-family:'Crimson Pro',Georgia,serif;font-size:16px;outline:none;transition:border-color .25s}
-.url-input:focus{border-color:rgba(168,85,247,.5)}
-.url-input::placeholder{color:#5a5670}
 </style>
 </head>
 <body>
 <div class="wrap" id="app">
   <div class="header-wrap">
     <div class="header"><div class="logo">⬡</div><h1>PDF Converter</h1></div>
-    <p class="subtitle">Extract text &amp; images, auto-redact sensitive data, export as Excel or editable document — from PDFs or webpages</p>
+    <p class="subtitle">Extract text &amp; images, auto-redact sensitive data, export as Excel or editable document</p>
     <p style="font-size:12px;color:#4ade80;margin-top:8px;font-family:'JetBrains Mono',monospace">✦ Runs entirely in your browser — no data leaves your device</p>
     <p style="font-size:11px;color:#6b6580;margin-top:4px;font-family:'JetBrains Mono',monospace" id="nlpStatus">Loading NLP engine...</p>
   </div>
   <div id="uploadPhase">
-    <div class="mode-tabs">
-      <button class="mode-tab active" data-mode="pdf">📁 PDF Upload</button>
-      <button class="mode-tab" data-mode="url">🌐 Webpage URL</button>
-    </div>
-    <div id="pdfMode">
     <div class="dropzone" id="dropzone">
       <div style="font-size:48px;margin-bottom:16px;opacity:.6" id="dropIcon">📁</div>
       <div id="dropHint">
@@ -116,20 +103,6 @@ h1{font-size:32px;font-weight:300;letter-spacing:-.5px;color:#f0ecf8}
       </div>
     </div>
     <input type="file" id="fileInput" accept=".pdf" style="display:none">
-    </div>
-    <div id="urlMode" class="hidden">
-      <div style="text-align:center;margin-bottom:16px">
-        <p style="font-size:18px;color:#a09cb5;margin-bottom:6px">Enter a webpage URL to convert</p>
-        <p style="font-size:14px;color:#5a5670">The page content will be fetched and converted to your chosen format</p>
-      </div>
-      <div class="url-input-wrap">
-        <input type="url" class="url-input" id="urlInput" placeholder="https://example.com/page" spellcheck="false">
-        <button class="glow-btn" id="fetchUrlBtn" style="white-space:nowrap;padding:14px 24px">Fetch Page</button>
-      </div>
-      <div id="urlStatus" class="hidden" style="text-align:center;margin-bottom:16px">
-        <p style="font-size:14px;color:#a09cb5" id="urlStatusText"></p>
-      </div>
-    </div>
     <div class="redact-toggle" id="redactToggle">
       <div class="toggle-track" id="toggleTrack"><div class="toggle-knob" id="toggleKnob"></div></div>
       <div style="flex:1">
@@ -296,8 +269,7 @@ const REDACTION_GROUPS = [
 // ============================================================
 const state = {
   file: null, fileData: null, redactEnabled: false,
-  redactState: {}, customKeywords: "", result: null, exportFormat: "xlsx",
-  inputMode: "pdf"
+  redactState: {}, customKeywords: "", result: null, exportFormat: "xlsx"
 };
 REDACTION_GROUPS.forEach(g => g.items.forEach(item => { state.redactState[item.id] = item.on; }));
 
