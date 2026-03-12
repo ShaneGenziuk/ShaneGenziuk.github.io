@@ -447,6 +447,197 @@ function avgConfidence(data) {
   return words.reduce((sum, w) => sum + w.confidence, 0) / words.length;
 }
 
+// ── Detect text content region and crop out noisy margins ──
+// Uses column and row projection profiles to find where actual text lives.
+// Noisy scan margins (age spots, photocopy artifacts, binding shadows) get cut.
+function cropToTextRegion(sourceCanvas) {
+  const w = sourceCanvas.width, h = sourceCanvas.height;
+  const ctx = sourceCanvas.getContext("2d");
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+
+  // Build binary map (dark = 1)
+  const darkThresh = 128;
+  const bw = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const g = 0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2];
+    bw[i] = g < darkThresh ? 1 : 0;
+  }
+
+  // Column projection: count dark pixels per column
+  const colSum = new Float32Array(w);
+  for (let x = 0; x < w; x++) {
+    let s = 0;
+    for (let y = 0; y < h; y++) s += bw[y * w + x];
+    colSum[x] = s;
+  }
+  // Row projection: count dark pixels per row
+  const rowSum = new Float32Array(h);
+  for (let y = 0; y < h; y++) {
+    let s = 0;
+    for (let x = 0; x < w; x++) s += bw[y * w + x];
+    rowSum[y] = s;
+  }
+
+  // Find text region boundaries using a threshold.
+  // Text columns/rows have significantly more dark pixels than noise-only margins.
+  // Use a sliding window to smooth out gaps between words/lines.
+  const winCol = Math.max(10, Math.floor(w * 0.02)); // ~2% of width
+  const winRow = Math.max(10, Math.floor(h * 0.02));
+
+  // Smooth column profile
+  const colSmooth = new Float32Array(w);
+  for (let x = 0; x < w; x++) {
+    let s = 0, c = 0;
+    for (let dx = -winCol; dx <= winCol; dx++) {
+      const xx = x + dx;
+      if (xx >= 0 && xx < w) { s += colSum[xx]; c++; }
+    }
+    colSmooth[x] = s / c;
+  }
+  // Smooth row profile
+  const rowSmooth = new Float32Array(h);
+  for (let y = 0; y < h; y++) {
+    let s = 0, c = 0;
+    for (let dy = -winRow; dy <= winRow; dy++) {
+      const yy = y + dy;
+      if (yy >= 0 && yy < h) { s += rowSum[yy]; c++; }
+    }
+    rowSmooth[y] = s / c;
+  }
+
+  // Thresholds: text columns/rows have density well above noise floor.
+  // We use the median of the smoothed profile as a baseline, then look for
+  // regions significantly above it.
+  const colSorted = [...colSmooth].sort((a, b) => a - b);
+  const colMedian = colSorted[Math.floor(w * 0.5)];
+  const colThresh = Math.max(colMedian * 3, h * 0.01); // at least 1% of height
+
+  const rowSorted = [...rowSmooth].sort((a, b) => a - b);
+  const rowMedian = rowSorted[Math.floor(h * 0.5)];
+  const rowThresh = Math.max(rowMedian * 3, w * 0.01);
+
+  // Find left/right bounds
+  let left = 0, right = w - 1;
+  for (let x = 0; x < w; x++) { if (colSmooth[x] > colThresh) { left = x; break; } }
+  for (let x = w - 1; x >= 0; x--) { if (colSmooth[x] > colThresh) { right = x; break; } }
+
+  // Find top/bottom bounds
+  let top = 0, bottom = h - 1;
+  for (let y = 0; y < h; y++) { if (rowSmooth[y] > rowThresh) { top = y; break; } }
+  for (let y = h - 1; y >= 0; y--) { if (rowSmooth[y] > rowThresh) { bottom = y; break; } }
+
+  // Add small safety margin (2% of dimension) to avoid clipping text edges
+  const xMargin = Math.floor(w * 0.02);
+  const yMargin = Math.floor(h * 0.02);
+  left = Math.max(0, left - xMargin);
+  right = Math.min(w - 1, right + xMargin);
+  top = Math.max(0, top - yMargin);
+  bottom = Math.min(h - 1, bottom + yMargin);
+
+  // Only crop if we're actually removing meaningful margin (>5% on any side)
+  const cropW = right - left + 1, cropH = bottom - top + 1;
+  if (cropW < w * 0.5 || cropH < h * 0.5) return sourceCanvas; // safety: don't over-crop
+  if (left < w * 0.05 && top < h * 0.05 && right > w * 0.95 && bottom > h * 0.95) return sourceCanvas; // margins too small to bother
+
+  const cropped = document.createElement("canvas");
+  cropped.width = cropW; cropped.height = cropH;
+  const cropCtx = cropped.getContext("2d");
+  cropCtx.drawImage(sourceCanvas, left, top, cropW, cropH, 0, 0, cropW, cropH);
+  return cropped;
+}
+
+// ── Connected component noise filter ──
+// Flood-fills dark blobs and removes ones that are too small (specks/noise)
+// or too isolated to be part of real text.
+function filterNoiseBlobs(sourceCanvas) {
+  const w = sourceCanvas.width, h = sourceCanvas.height;
+  const ctx = sourceCanvas.getContext("2d");
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  const totalPx = w * h;
+
+  // Threshold to binary
+  const bw = new Uint8Array(totalPx);
+  for (let i = 0; i < totalPx; i++) {
+    const g = 0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2];
+    bw[i] = g < 128 ? 1 : 0;
+  }
+
+  // Label connected components using flood fill
+  const labels = new Int32Array(totalPx); // 0 = unlabeled
+  let nextLabel = 1;
+  const blobSizes = [0]; // index 0 unused, blobSizes[label] = pixel count
+  const blobBounds = [null]; // blobBounds[label] = {x1,y1,x2,y2}
+
+  const queue = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x;
+      if (bw[idx] === 0 || labels[idx] !== 0) continue;
+      // BFS flood fill
+      const label = nextLabel++;
+      let size = 0, bx1 = x, by1 = y, bx2 = x, by2 = y;
+      queue.push(idx);
+      labels[idx] = label;
+      while (queue.length > 0) {
+        const ci = queue.pop();
+        size++;
+        const cx = ci % w, cy = (ci - cx) / w;
+        if (cx < bx1) bx1 = cx; if (cx > bx2) bx2 = cx;
+        if (cy < by1) by1 = cy; if (cy > by2) by2 = cy;
+        // 4-connected neighbours
+        const neighbours = [ci - 1, ci + 1, ci - w, ci + w];
+        for (const ni of neighbours) {
+          if (ni >= 0 && ni < totalPx && bw[ni] === 1 && labels[ni] === 0) {
+            // Check we don't wrap across rows for left/right neighbours
+            const nx = ni % w;
+            if (ni === ci - 1 && nx === w - 1) continue;
+            if (ni === ci + 1 && nx === 0) continue;
+            labels[ni] = label;
+            queue.push(ni);
+          }
+        }
+      }
+      blobSizes.push(size);
+      blobBounds.push({ x1: bx1, y1: by1, x2: bx2, y2: by2 });
+    }
+  }
+
+  // Determine size thresholds for noise.
+  // Typical character at 300+ DPI: ~20-2000 pixels.
+  // At 4x PDF scale, a character might be 50-5000px.
+  // Very small blobs (<15px) are almost certainly noise specks.
+  // We also check aspect ratio — very extreme aspect ratios (thin lines) are noise.
+  const minBlobPx = 15;
+  const maxBlobPx = totalPx * 0.05; // blobs >5% of image are stains/shadows
+
+  for (let label = 1; label < nextLabel; label++) {
+    const size = blobSizes[label];
+    const b = blobBounds[label];
+    const bw2 = b.x2 - b.x1 + 1, bh = b.y2 - b.y1 + 1;
+
+    let isNoise = false;
+    if (size < minBlobPx) isNoise = true;
+    if (size > maxBlobPx) isNoise = true;
+    // Very thin horizontal or vertical line spanning a large distance — likely artifact
+    if (bw2 > w * 0.3 && bh < 4) isNoise = true;
+    if (bh > h * 0.3 && bw2 < 4) isNoise = true;
+
+    if (isNoise) {
+      // Erase this blob — set to white
+      for (let i = 0; i < totalPx; i++) {
+        if (labels[i] === label) {
+          d[i*4] = d[i*4+1] = d[i*4+2] = 255;
+        }
+      }
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  return sourceCanvas;
+}
+
 // ── Add border padding to a canvas (no other processing) ──
 function padCanvas(sourceCanvas) {
   const pad = 30;
@@ -461,17 +652,21 @@ function padCanvas(sourceCanvas) {
 }
 
 async function ocrFromCanvas(canvas) {
-  const psm = detectBestPSM(canvas);
+  // Stage 1: Crop noisy margins and filter noise blobs (shared by both paths)
+  const cropped = cropToTextRegion(canvas);
+  const denoised = filterNoiseBlobs(cropped);
+
+  const psm = detectBestPSM(denoised);
   const worker = await getOcrWorker();
   await worker.setParameters({ tessedit_pageseg_mode: psm });
 
-  // Path A: raw image (just padded) — best for clean/typewritten scans
-  const raw = padCanvas(canvas);
+  // Path A: denoised image (just padded) — best for clean/typewritten scans
+  const raw = padCanvas(denoised);
   const rawResult = await worker.recognize(raw);
   const rawConf = avgConfidence(rawResult.data);
 
-  // Path B: preprocessed image — helps with degraded/noisy scans
-  const cleaned = preprocessForOcr(canvas);
+  // Path B: denoised + full preprocessing — helps with degraded scans
+  const cleaned = preprocessForOcr(denoised);
   const cleanResult = await worker.recognize(cleaned);
   const cleanConf = avgConfidence(cleanResult.data);
 
@@ -484,7 +679,6 @@ async function ocrFromCanvas(canvas) {
     const prevQuality = tesseractWorkerQuality;
     const bestWorker = await getOcrWorker("best");
     await bestWorker.setParameters({ tessedit_pageseg_mode: psm });
-    // Retry with the image variant that scored higher
     const retryImg = rawConf >= cleanConf ? raw : cleaned;
     const retry = await bestWorker.recognize(retryImg);
     const retryConf = avgConfidence(retry.data);
