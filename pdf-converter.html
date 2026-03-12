@@ -639,7 +639,7 @@ function padCanvas(sourceCanvas) {
 }
 
 async function ocrFromCanvas(canvas) {
-  // Stage 1: Crop noisy margins and filter noise blobs (shared by both paths)
+  // Stage 1: Crop noisy margins and filter noise blobs
   const cropped = cropToTextRegion(canvas);
   const denoised = filterNoiseBlobs(cropped);
 
@@ -647,33 +647,39 @@ async function ocrFromCanvas(canvas) {
   const worker = await getOcrWorker();
   await worker.setParameters({ tessedit_pageseg_mode: psm });
 
-  // Path A: denoised image (just padded) — best for clean/typewritten scans
+  // Try raw (denoised + padded) first — works best for most scans
   const raw = padCanvas(denoised);
   const rawResult = await worker.recognize(raw);
   const rawConf = avgConfidence(rawResult.data);
 
-  // Path B: denoised + full preprocessing — helps with degraded scans
-  const cleaned = preprocessForOcr(denoised);
-  const cleanResult = await worker.recognize(cleaned);
-  const cleanConf = avgConfidence(cleanResult.data);
-
-  // Pick the higher-confidence result
-  let bestData = rawConf >= cleanConf ? rawResult.data : cleanResult.data;
-  let bestConf = Math.max(rawConf, cleanConf);
-
-  // If still low confidence and not on best model, retry with tessdata_best
-  if (bestConf < 60 && tesseractWorkerQuality !== "best") {
-    const prevQuality = tesseractWorkerQuality;
-    const bestWorker = await getOcrWorker("best");
-    await bestWorker.setParameters({ tessedit_pageseg_mode: psm });
-    const retryImg = rawConf >= cleanConf ? raw : cleaned;
-    const retry = await bestWorker.recognize(retryImg);
-    const retryConf = avgConfidence(retry.data);
-    if (retryConf > bestConf) return retry.data.text || "";
-    await getOcrWorker(prevQuality);
+  // Only run preprocessed path if raw confidence is poor
+  if (rawConf < 50) {
+    const cleaned = preprocessForOcr(denoised);
+    const cleanResult = await worker.recognize(cleaned);
+    const cleanConf = avgConfidence(cleanResult.data);
+    if (cleanConf > rawConf) {
+      // If still low, try tessdata_best on the better image
+      if (cleanConf < 60 && tesseractWorkerQuality !== "best") {
+        const bestWorker = await getOcrWorker("best");
+        await bestWorker.setParameters({ tessedit_pageseg_mode: psm });
+        const retry = await bestWorker.recognize(cleaned);
+        const retryConf = avgConfidence(retry.data);
+        if (retryConf > cleanConf) return retry.data.text || "";
+      }
+      return cleanResult.data.text || "";
+    }
   }
 
-  return bestData.text || "";
+  // Raw was good enough, but if still below threshold try tessdata_best
+  if (rawConf < 60 && tesseractWorkerQuality !== "best") {
+    const bestWorker = await getOcrWorker("best");
+    await bestWorker.setParameters({ tessedit_pageseg_mode: psm });
+    const retry = await bestWorker.recognize(raw);
+    const retryConf = avgConfidence(retry.data);
+    if (retryConf > rawConf) return retry.data.text || "";
+  }
+
+  return rawResult.data.text || "";
 }
 
 
