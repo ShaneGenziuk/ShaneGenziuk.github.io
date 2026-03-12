@@ -522,3 +522,124 @@ describe("JS source integrity", () => {
     expect(jsSource).toContain("#e74c3c");
   });
 });
+
+// ============================================================
+// 7. OCR ENGINE (Tesseract.js integration)
+// ============================================================
+describe("OCR engine integration", () => {
+  test("contains Tesseract.js CDN script loader", () => {
+    expect(jsSource).toContain("tesseract.min.js");
+    expect(jsSource).toContain("cdn.jsdelivr.net/npm/tesseract.js@5");
+  });
+
+  test("contains ocrAvailable flag", () => {
+    expect(jsSource).toContain("let ocrAvailable = false");
+  });
+
+  test("contains ocrReady promise", () => {
+    expect(jsSource).toContain("const ocrReady = new Promise");
+  });
+
+  test("contains getOcrWorker function", () => {
+    expect(jsSource).toContain("async function getOcrWorker()");
+  });
+
+  test("contains ocrFromCanvas function", () => {
+    expect(jsSource).toContain("async function ocrFromCanvas(canvas)");
+  });
+
+  test("createWorker is called with English language", () => {
+    expect(jsSource).toContain('Tesseract.createWorker("eng"');
+  });
+
+  test("OCR fallback triggers when page has no text items", () => {
+    expect(jsSource).toContain("needsOcr");
+    expect(jsSource).toContain("!items.length || !buildLines(items).length");
+  });
+
+  test("OCR fallback checks ocrAvailable before running", () => {
+    expect(jsSource).toContain("if (ocrAvailable)");
+  });
+
+  test("OCR progress shown in process button", () => {
+    expect(jsSource).toContain("OCR page ${i}/${numPages}");
+  });
+
+  test("OCR pages tagged in pageContents", () => {
+    expect(jsSource).toContain("ocr: true");
+  });
+
+  test("OCR page separator includes (OCR) label", () => {
+    expect(jsSource).toContain("Page ${i} (OCR)");
+  });
+
+  test("ocrPageCount tracked in results", () => {
+    expect(jsSource).toContain("ocrPageCount");
+    expect(jsSource).toContain("pageContents.filter(pc => pc.ocr).length");
+  });
+
+  test("results banner shows OCR page count when applicable", () => {
+    expect(jsSource).toContain("via OCR");
+  });
+
+  test("OCR text is split into paragraphs", () => {
+    // Verify OCR text gets split on double newlines into paragraph objects
+    expect(jsSource).toContain("ocrText.split(");
+    expect(jsSource).toContain("ocrParas");
+  });
+
+  test("OCR text appended to fullText for redaction", () => {
+    // The ocrText is added to fullText so redaction patterns can match it
+    expect(jsSource).toContain('fullText += ocrText + "\\n\\n"');
+  });
+});
+
+// ============================================================
+// 8. OCR TEXT PARAGRAPH SPLITTING (unit test)
+// ============================================================
+describe("OCR paragraph splitting logic", () => {
+  // Mirrors the splitting done in the OCR fallback path
+  function splitOcrText(ocrText) {
+    return ocrText.split(/\n\s*\n/).filter(p => p.trim()).map(p => ({ text: p.trim(), type: "body", page: 1 }));
+  }
+
+  test("splits double-newline separated text into paragraphs", () => {
+    const result = splitOcrText("First paragraph.\n\nSecond paragraph.");
+    expect(result).toHaveLength(2);
+    expect(result[0].text).toBe("First paragraph.");
+    expect(result[1].text).toBe("Second paragraph.");
+  });
+
+  test("single block of text returns one paragraph", () => {
+    const result = splitOcrText("Just one block of text here.");
+    expect(result).toHaveLength(1);
+    expect(result[0].text).toBe("Just one block of text here.");
+  });
+
+  test("empty OCR text returns no paragraphs", () => {
+    const result = splitOcrText("");
+    expect(result).toHaveLength(0);
+  });
+
+  test("whitespace-only text returns no paragraphs", () => {
+    const result = splitOcrText("   \n\n   \n   ");
+    expect(result).toHaveLength(0);
+  });
+
+  test("paragraphs get type body and page number", () => {
+    const result = splitOcrText("Hello world");
+    expect(result[0].type).toBe("body");
+    expect(result[0].page).toBe(1);
+  });
+
+  test("trims whitespace from each paragraph", () => {
+    const result = splitOcrText("  spaced out  \n\n  another one  ");
+    expect(result[0].text).toBe("spaced out");
+    expect(result[1].text).toBe("another one");
+  });
+
+  test("handles multiple consecutive blank lines", () => {
+    const result = splitOcrText("First\n\n\n\nSecond\n\n\n\n\nThird");
+    expect(result).toHaveLength(3);
+  });
+});

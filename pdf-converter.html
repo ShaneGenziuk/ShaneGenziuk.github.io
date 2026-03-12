@@ -197,6 +197,34 @@ const nlpReady = new Promise(resolve => {
   document.head.appendChild(s);
 });
 
+// ============================================================
+// OCR ENGINE — Tesseract.js (async load, app works without it)
+// ============================================================
+let tesseractWorker = null;
+let ocrAvailable = false;
+const ocrReady = new Promise(resolve => {
+  const s = document.createElement("script");
+  s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+  s.onload = () => {
+    ocrAvailable = true;
+    resolve();
+  };
+  s.onerror = () => resolve();
+  document.head.appendChild(s);
+});
+
+async function getOcrWorker() {
+  if (tesseractWorker) return tesseractWorker;
+  tesseractWorker = await Tesseract.createWorker("eng", 1, { workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js", corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js" });
+  return tesseractWorker;
+}
+
+async function ocrFromCanvas(canvas) {
+  const worker = await getOcrWorker();
+  const { data } = await worker.recognize(canvas);
+  return data.text || "";
+}
+
 
 // ============================================================
 // REDACTION CATEGORIES (4 groups, 33 items)
@@ -798,10 +826,31 @@ async function processFile() {
       pageImages.push(pageImg);
 
       const items = textContent.items;
-      if (!items.length) { pageContents.push({ paragraphs: [], tables: [], image: pageImg }); continue; }
+      const needsOcr = !items.length || !buildLines(items).length;
+
+      // OCR fallback for scanned / image-only pages
+      if (needsOcr) {
+        if (ocrAvailable) {
+          processBtn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:10px"><span class="spinner"></span>OCR page ${i}/${numPages}...</span>`;
+          const ocrText = await ocrFromCanvas(canvas);
+          if (ocrText.trim()) {
+            const ocrParas = ocrText.split(/\n\s*\n/).filter(p => p.trim()).map(p => ({ text: p.trim(), type: "body", page: i }));
+            fullText += ocrText + "\n\n";
+            pageContents.push({ paragraphs: ocrParas, tables: [], image: pageImg, ocr: true });
+            if (allTextRows.length > 0 && numPages > 1) {
+              allTextRows.push(["", `--- Page ${i} (OCR) ---`]);
+              allTextContent += "\n\n";
+            }
+            ocrParas.forEach(p => { allTextRows.push([String(allTextRows.length + 1), p.text]); });
+            allTextContent += ocrParas.map(p => p.text).join("\n\n");
+            continue;
+          }
+        }
+        pageContents.push({ paragraphs: [], tables: [], image: pageImg });
+        continue;
+      }
 
       const lines = buildLines(items);
-      if (!lines.length) { pageContents.push({ paragraphs: [], tables: [], image: pageImg }); continue; }
 
       const bodyFont = getBodyFontSize(lines);
       const bodyFontName = getBodyFontName(lines);
@@ -863,7 +912,8 @@ async function processFile() {
       });
     }
 
-    state.result = { title: state.file.name.replace(/\.pdf$/i, ""), sheets, pageImages, pageContents, redactionStats };
+    const ocrPageCount = pageContents.filter(pc => pc.ocr).length;
+    state.result = { title: state.file.name.replace(/\.pdf$/i, ""), sheets, pageImages, pageContents, redactionStats, ocrPageCount };
     renderResults();
   } catch (err) {
     console.error(err);
@@ -880,7 +930,8 @@ function renderResults() {
   uploadPhase.classList.add("hidden"); resultsPhase.classList.remove("hidden");
   let html = '<div class="content-section fade-up">';
   html += '<div class="section-title">Results</div><div class="section-title-bar"></div>';
-  html += `<div class="banner banner-success"><span style="font-size:22px">✓</span><div><p style="color:#059669;font-weight:600;font-size:16px">Content extracted</p><p style="color:#636e72;font-size:13px;margin-top:2px">${r.sheets.length} section${r.sheets.length !== 1 ? 's' : ''} · ${r.pageImages.length} page${r.pageImages.length !== 1 ? 's' : ''}</p></div></div>`;
+  const ocrNote = r.ocrPageCount ? ` · ${r.ocrPageCount} page${r.ocrPageCount !== 1 ? 's' : ''} via OCR` : '';
+  html += `<div class="banner banner-success"><span style="font-size:22px">✓</span><div><p style="color:#059669;font-weight:600;font-size:16px">Content extracted</p><p style="color:#636e72;font-size:13px;margin-top:2px">${r.sheets.length} section${r.sheets.length !== 1 ? 's' : ''} · ${r.pageImages.length} page${r.pageImages.length !== 1 ? 's' : ''}${ocrNote}</p></div></div>`;
 
   if (r.redactionStats && r.redactionStats.total_redactions > 0) {
     html += `<div class="banner banner-redact"><span style="font-size:22px">🔒</span><div style="flex:1"><p style="color:#e74c3c;font-weight:600;font-size:16px">${r.redactionStats.total_redactions} redaction${r.redactionStats.total_redactions !== 1 ? 's' : ''}</p><p style="color:#636e72;font-size:13px;margin-top:2px">${Object.entries(r.redactionStats.by_category).map(([k, v]) => `${k}: ${v}`).join(' · ')}</p></div></div>`;
