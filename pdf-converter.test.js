@@ -593,8 +593,8 @@ describe("OCR engine integration", () => {
     expect(jsSource).toContain('fullText += ocrText + "\\n\\n"');
   });
 
-  test("OCR renders at 3x scale for better resolution", () => {
-    expect(jsSource).toContain("ocrScale = 3");
+  test("OCR renders at 4x scale for better resolution", () => {
+    expect(jsSource).toContain("ocrScale = 4");
     expect(jsSource).toContain("ocrCanvas");
   });
 
@@ -605,42 +605,67 @@ describe("OCR engine integration", () => {
 });
 
 // ============================================================
-// 7b. OCR IMAGE PREPROCESSING
+// 7b. OCR IMAGE PREPROCESSING PIPELINE
 // ============================================================
 describe("OCR image preprocessing", () => {
   test("contains preprocessForOcr function", () => {
     expect(jsSource).toContain("function preprocessForOcr(sourceCanvas)");
   });
 
-  test("preprocessing converts to grayscale", () => {
+  test("step 1: converts to grayscale using ITU-R BT.601 luma", () => {
     expect(jsSource).toContain("0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]");
   });
 
-  test("preprocessing performs contrast stretching", () => {
+  test("step 2: performs contrast stretching", () => {
     expect(jsSource).toContain("Contrast stretch");
     expect(jsSource).toContain("clipLo");
     expect(jsSource).toContain("clipHi");
   });
 
-  test("preprocessing removes horizontal line artifacts", () => {
+  test("step 3: removes horizontal line artifacts with multi-pass", () => {
     expect(jsSource).toContain("Remove horizontal line artifacts");
     expect(jsSource).toContain("rowAvg");
     expect(jsSource).toContain("neighbourAvg");
+    expect(jsSource).toContain("lineMargin = 6");
   });
 
-  test("preprocessing applies Otsu binarization", () => {
-    expect(jsSource).toContain("Adaptive binarization");
-    expect(jsSource).toContain("threshold");
-    expect(jsSource).toContain("maxVar");
+  test("step 4: applies unsharp mask sharpening", () => {
+    expect(jsSource).toContain("Unsharp mask sharpening");
+    expect(jsSource).toContain("sharpenAmount");
+    expect(jsSource).toContain("blurred");
+    expect(jsSource).toContain("3x3 Gaussian");
   });
 
-  test("preprocessing removes salt-and-pepper noise", () => {
-    expect(jsSource).toContain("noise removal");
+  test("step 5: applies Sauvola adaptive local thresholding", () => {
+    expect(jsSource).toContain("Sauvola adaptive local thresholding");
+    expect(jsSource).toContain("k_sauvola");
+    expect(jsSource).toContain("intImg");
+    expect(jsSource).toContain("intSq");
+    expect(jsSource).toContain("integral image");
+  });
+
+  test("step 6: applies morphological dilation for broken strokes", () => {
+    expect(jsSource).toContain("Morphological dilation");
+    expect(jsSource).toContain("cross structuring element");
+    expect(jsSource).toContain("dilated");
+  });
+
+  test("step 7: removes salt-and-pepper noise", () => {
+    expect(jsSource).toContain("Noise removal");
     expect(jsSource).toContain("blackNeighbours");
   });
 
   test("ocrFromCanvas calls preprocessForOcr before recognition", () => {
     expect(jsSource).toContain("preprocessForOcr(canvas)");
+  });
+
+  test("Tesseract configured with PSM 6 for uniform text blocks", () => {
+    expect(jsSource).toContain("tessedit_pageseg_mode");
+    expect(jsSource).toContain('"6"');
+  });
+
+  test("Tesseract configured to preserve interword spaces", () => {
+    expect(jsSource).toContain("preserve_interword_spaces");
   });
 });
 
@@ -698,56 +723,81 @@ describe("OCR paragraph splitting logic", () => {
 // 9. OCR PREPROCESSING ALGORITHMS (unit tests)
 // ============================================================
 describe("OCR preprocessing algorithms", () => {
-  // Otsu's threshold — mirrors the implementation
-  function otsuThreshold(histogram, totalPixels) {
-    let sumAll = 0;
-    for (let v = 0; v < 256; v++) sumAll += v * histogram[v];
-    let sumB = 0, wB = 0, wF = 0, maxVar = 0, threshold = 128;
-    for (let v = 0; v < 256; v++) {
-      wB += histogram[v]; if (!wB) continue;
-      wF = totalPixels - wB; if (!wF) break;
-      sumB += v * histogram[v];
-      const mB = sumB / wB, mF = (sumAll - sumB) / wF;
-      const variance = wB * wF * (mB - mF) * (mB - mF);
-      if (variance > maxVar) { maxVar = variance; threshold = v; }
+  // Sauvola threshold — mirrors the implementation
+  describe("Sauvola adaptive thresholding", () => {
+    function sauvolaThreshold(mean, std, k, R) {
+      return mean * (1 + k * (std / R - 1));
     }
-    return threshold;
-  }
 
-  describe("Otsu threshold", () => {
-    test("bimodal distribution splits at valley", () => {
-      // Two peaks: one around 50 (dark text), one around 200 (white background)
-      const hist = new Uint32Array(256);
-      for (let v = 40; v <= 60; v++) hist[v] = 100;
-      for (let v = 190; v <= 210; v++) hist[v] = 500;
-      const total = Array.from(hist).reduce((a, b) => a + b, 0);
-      const t = otsuThreshold(hist, total);
-      expect(t).toBeGreaterThanOrEqual(60);
-      expect(t).toBeLessThan(190);
+    test("white background pixel stays white (high mean, low std)", () => {
+      // Mean 220, std 5 → threshold should be below 220 → pixel 220 > thresh → white
+      const thresh = sauvolaThreshold(220, 5, 0.2, 128);
+      expect(220).toBeGreaterThan(thresh);
     });
 
-    test("uniform distribution returns a threshold", () => {
-      const hist = new Uint32Array(256);
-      for (let v = 0; v < 256; v++) hist[v] = 10;
-      const t = otsuThreshold(hist, 2560);
-      expect(t).toBeGreaterThanOrEqual(0);
-      expect(t).toBeLessThanOrEqual(255);
+    test("dark text pixel goes black (low mean region)", () => {
+      // Mean 60, std 40 → threshold ~= 60*(1 + 0.2*(40/128-1)) ~= 60*0.8375 ≈ 50.25
+      const thresh = sauvolaThreshold(60, 40, 0.2, 128);
+      expect(thresh).toBeLessThan(60);
+      expect(thresh).toBeGreaterThan(30);
     });
 
-    test("all-white image gives threshold near 0 or 128 (no dark pixels)", () => {
-      const hist = new Uint32Array(256);
-      hist[255] = 1000;
-      const t = otsuThreshold(hist, 1000);
-      expect(typeof t).toBe("number");
+    test("high contrast area: threshold adapts to local mean", () => {
+      const lightThresh = sauvolaThreshold(200, 30, 0.2, 128);
+      const darkThresh = sauvolaThreshold(80, 30, 0.2, 128);
+      expect(lightThresh).toBeGreaterThan(darkThresh);
     });
 
-    test("dark text on white background: threshold between them", () => {
-      const hist = new Uint32Array(256);
-      hist[10] = 200;   // dark text
-      hist[240] = 800;  // light background
-      const t = otsuThreshold(hist, 1000);
-      expect(t).toBeGreaterThanOrEqual(10);
-      expect(t).toBeLessThanOrEqual(240);
+    test("uniform area with zero std: threshold drops below mean", () => {
+      // std=0 → thresh = mean*(1 + k*(0-1)) = mean*(1-k) = mean*0.8
+      const thresh = sauvolaThreshold(200, 0, 0.2, 128);
+      expect(thresh).toBe(200 * 0.8);
+    });
+
+    test("k parameter controls sensitivity", () => {
+      const lowK = sauvolaThreshold(150, 20, 0.1, 128);
+      const highK = sauvolaThreshold(150, 20, 0.4, 128);
+      // Higher k → threshold drops more → more pixels survive as white
+      expect(lowK).toBeGreaterThan(highK);
+    });
+  });
+
+  // Integral image for fast local stats
+  describe("Integral image computation", () => {
+    function buildIntegralImage(pixels, w, h) {
+      const iw = w + 1;
+      const intImg = new Float64Array(iw * (h + 1));
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const v = pixels[y * w + x];
+          const idx = (y + 1) * iw + (x + 1);
+          intImg[idx] = v + intImg[idx - 1] + intImg[idx - iw] - intImg[idx - iw - 1];
+        }
+      }
+      return intImg;
+    }
+
+    function regionSum(intImg, x1, y1, x2, y2, iw) {
+      return intImg[(y2 + 1) * iw + (x2 + 1)] - intImg[y1 * iw + (x2 + 1)] - intImg[(y2 + 1) * iw + x1] + intImg[y1 * iw + x1];
+    }
+
+    test("sum of entire 3x3 image", () => {
+      const pixels = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+      const intImg = buildIntegralImage(pixels, 3, 3);
+      expect(regionSum(intImg, 0, 0, 2, 2, 4)).toBe(45);
+    });
+
+    test("sum of sub-region", () => {
+      const pixels = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+      const intImg = buildIntegralImage(pixels, 3, 3);
+      // Top-left 2x2: 1+2+4+5 = 12
+      expect(regionSum(intImg, 0, 0, 1, 1, 4)).toBe(12);
+    });
+
+    test("single pixel region", () => {
+      const pixels = [10, 20, 30, 40];
+      const intImg = buildIntegralImage(pixels, 2, 2);
+      expect(regionSum(intImg, 1, 1, 1, 1, 3)).toBe(40);
     });
   });
 
@@ -766,17 +816,83 @@ describe("OCR preprocessing algorithms", () => {
 
     test("midpoint maps correctly", () => {
       const result = contrastStretch([150], 100, 200);
-      expect(result[0]).toBe(128); // (50/100)*255 ≈ 128
+      expect(result[0]).toBe(128);
     });
 
     test("values below lo clamp to 0", () => {
-      const result = contrastStretch([50], 100, 200);
-      expect(result[0]).toBe(0);
+      expect(contrastStretch([50], 100, 200)[0]).toBe(0);
     });
 
     test("values above hi clamp to 255", () => {
-      const result = contrastStretch([250], 100, 200);
-      expect(result[0]).toBe(255);
+      expect(contrastStretch([250], 100, 200)[0]).toBe(255);
+    });
+  });
+
+  // Unsharp mask
+  describe("Unsharp mask sharpening", () => {
+    function unsharpMask(original, blurred, amount) {
+      return Math.round(Math.min(255, Math.max(0, original + amount * (original - blurred))));
+    }
+
+    test("sharpens edge (original > blurred)", () => {
+      // Dark-to-light edge: original=200, blur=150, amount=1.5 → 200+1.5*50=275→255
+      expect(unsharpMask(200, 150, 1.5)).toBe(255);
+    });
+
+    test("darkens dark side of edge (original < blurred)", () => {
+      // Light-to-dark edge: original=50, blur=100, amount=1.5 → 50+1.5*(-50)=-25→0
+      expect(unsharpMask(50, 100, 1.5)).toBe(0);
+    });
+
+    test("no change when original equals blurred (flat area)", () => {
+      expect(unsharpMask(128, 128, 1.5)).toBe(128);
+    });
+
+    test("amount=0 means no sharpening", () => {
+      expect(unsharpMask(200, 100, 0)).toBe(200);
+    });
+  });
+
+  // Morphological dilation
+  describe("Morphological dilation (cross element)", () => {
+    function dilate3x3Cross(grid, w, h) {
+      const out = new Uint8Array(w * h);
+      for (let i = 0; i < out.length; i++) out[i] = grid[i];
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          if (grid[y * w + x] === 0) continue;
+          if (grid[(y - 1) * w + x] === 0 || grid[(y + 1) * w + x] === 0 ||
+              grid[y * w + (x - 1)] === 0 || grid[y * w + (x + 1)] === 0) {
+            out[y * w + x] = 0;
+          }
+        }
+      }
+      return out;
+    }
+
+    test("dilates single black pixel into cross shape", () => {
+      // 5x5 grid with single black pixel at center
+      const g = new Uint8Array(25).fill(255);
+      g[12] = 0; // center of 5x5
+      const result = dilate3x3Cross(g, 5, 5);
+      expect(result[12]).toBe(0); // center stays
+      expect(result[7]).toBe(0);  // above
+      expect(result[17]).toBe(0); // below
+      expect(result[11]).toBe(0); // left
+      expect(result[13]).toBe(0); // right
+      expect(result[6]).toBe(255); // diagonal — not dilated
+    });
+
+    test("all-white grid stays white", () => {
+      const g = new Uint8Array(9).fill(255);
+      const result = dilate3x3Cross(g, 3, 3);
+      expect(result.every(v => v === 255)).toBe(true);
+    });
+
+    test("all-black grid stays black", () => {
+      const g = new Uint8Array(9).fill(0);
+      const result = dilate3x3Cross(g, 3, 3);
+      expect(result.every(v => v === 0)).toBe(true);
     });
   });
 
@@ -793,7 +909,6 @@ describe("OCR preprocessing algorithms", () => {
     }
 
     test("detects isolated black pixel (no black neighbours)", () => {
-      // 3x3 grid, center is black, rest is white
       const grid = [255, 255, 255, 255, 0, 255, 255, 255, 255];
       expect(isIsolatedBlack(grid, 1, 1, 3)).toBe(true);
     });
@@ -820,23 +935,25 @@ describe("OCR preprocessing algorithms", () => {
       let aboveSum = 0, belowSum = 0;
       for (let m = 1; m <= margin; m++) { aboveSum += rowAvg[y - m]; belowSum += rowAvg[y + m]; }
       const neighbourAvg = (aboveSum + belowSum) / (margin * 2);
-      return rowAvg[y] < neighbourAvg - 30;
+      return rowAvg[y] < neighbourAvg - 25;
     }
 
     test("dark row among light rows is a line artifact", () => {
-      // Rows: 200, 200, 200, 200, 100, 200, 200, 200, 200
-      const rowAvg = [200, 200, 200, 200, 100, 200, 200, 200, 200];
-      expect(isLineArtifact(rowAvg, 4, 4)).toBe(true);
+      const rowAvg = new Array(13).fill(200);
+      rowAvg[6] = 100;
+      expect(isLineArtifact(rowAvg, 6, 6)).toBe(true);
     });
 
     test("row matching neighbours is not a line artifact", () => {
-      const rowAvg = [200, 200, 200, 200, 195, 200, 200, 200, 200];
-      expect(isLineArtifact(rowAvg, 4, 4)).toBe(false);
+      const rowAvg = new Array(13).fill(200);
+      rowAvg[6] = 195;
+      expect(isLineArtifact(rowAvg, 6, 6)).toBe(false);
     });
 
-    test("slightly darker row within 30 tolerance is not flagged", () => {
-      const rowAvg = [200, 200, 200, 200, 175, 200, 200, 200, 200];
-      expect(isLineArtifact(rowAvg, 4, 4)).toBe(false);
+    test("row within 25 tolerance is not flagged", () => {
+      const rowAvg = new Array(13).fill(200);
+      rowAvg[6] = 180;
+      expect(isLineArtifact(rowAvg, 6, 6)).toBe(false);
     });
   });
 });
