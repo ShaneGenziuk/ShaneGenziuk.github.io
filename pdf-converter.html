@@ -300,8 +300,9 @@ function deskewCanvas(sourceCanvas) {
 
 // ── Image preprocessing pipeline for OCR quality ──
 // Steps: deskew → grayscale → contrast stretch → horizontal line removal →
-//        unsharp mask sharpen → Sauvola adaptive threshold →
-//        morphological dilate → noise removal → border padding
+//        light sharpen → noise removal → border padding
+// NOTE: We intentionally do NOT binarize or dilate — Tesseract's internal
+// binarization (Otsu + adaptive) works better when given a clean grayscale image.
 function preprocessForOcr(sourceCanvas) {
   // 0. Deskew — correct rotation before any other processing
   const deskewed = deskewCanvas(sourceCanvas);
@@ -334,8 +335,7 @@ function preprocessForOcr(sourceCanvas) {
     d[i] = d[i + 1] = d[i + 2] = v;
   }
 
-  // 3. Remove horizontal line artifacts (scan lines, fold marks, strikethroughs)
-  // Multi-pass: detect bands of 1-3px dark rows and replace with interpolated values
+  // 3. Remove horizontal line artifacts (scan lines, fold marks)
   const rowAvg = new Float32Array(h);
   for (let y = 0; y < h; y++) {
     let sum = 0;
@@ -354,16 +354,15 @@ function preprocessForOcr(sourceCanvas) {
         const below = d[((y + 1) * w + x) * 4];
         d[idx] = d[idx + 1] = d[idx + 2] = (above + below) >> 1;
       }
-      rowAvg[y] = neighbourAvg; // update so adjacent rows can also be caught
+      rowAvg[y] = neighbourAvg;
     }
   }
 
-  // 4. Unsharp mask sharpening — makes blurry text edges crisper
-  // Apply 3x3 Gaussian blur then subtract from original
+  // 4. Light unsharp mask — gentle sharpening (0.5x) to clarify blurry edges
+  //    without creating halos that confuse Tesseract
   const gray = new Float32Array(totalPx);
   for (let i = 0; i < totalPx; i++) gray[i] = d[i * 4];
   const blurred = new Float32Array(totalPx);
-  // Simple 3x3 Gaussian kernel: [1,2,1]/[2,4,2]/[1,2,1] / 16
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const idx = y * w + x;
@@ -374,7 +373,7 @@ function preprocessForOcr(sourceCanvas) {
       ) / 16;
     }
   }
-  const sharpenAmount = 1.5;
+  const sharpenAmount = 0.5;
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const idx = y * w + x;
@@ -386,72 +385,28 @@ function preprocessForOcr(sourceCanvas) {
     }
   }
 
-  // 5. Sauvola adaptive local thresholding
-  // Uses local mean and std dev in a window — far better than global Otsu for degraded docs
-  const winSize = 25; // neighbourhood window (odd)
-  const halfW = (winSize - 1) >> 1;
-  const k_sauvola = 0.2; // sensitivity (0.2 = good for degraded docs)
-  const R = 128; // dynamic range of std dev
-  // Build integral image and integral of squares for fast local stats
-  const intImg = new Float64Array((w + 1) * (h + 1));
-  const intSq  = new Float64Array((w + 1) * (h + 1));
-  const iw = w + 1;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const v = d[(y * w + x) * 4];
-      const idx = (y + 1) * iw + (x + 1);
-      intImg[idx] = v + intImg[idx - 1] + intImg[idx - iw] - intImg[idx - iw - 1];
-      intSq[idx]  = v * v + intSq[idx - 1] + intSq[idx - iw] - intSq[idx - iw - 1];
-    }
-  }
-  const binarized = new Uint8Array(totalPx);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const y1 = Math.max(0, y - halfW), y2 = Math.min(h - 1, y + halfW);
-      const x1 = Math.max(0, x - halfW), x2 = Math.min(w - 1, x + halfW);
-      const area = (y2 - y1 + 1) * (x2 - x1 + 1);
-      const sumVal = intImg[(y2 + 1) * iw + (x2 + 1)] - intImg[(y1) * iw + (x2 + 1)] - intImg[(y2 + 1) * iw + (x1)] + intImg[(y1) * iw + (x1)];
-      const sumSq  = intSq[(y2 + 1) * iw + (x2 + 1)]  - intSq[(y1) * iw + (x2 + 1)]  - intSq[(y2 + 1) * iw + (x1)]  + intSq[(y1) * iw + (x1)];
-      const mean = sumVal / area;
-      const variance = sumSq / area - mean * mean;
-      const std = Math.sqrt(Math.max(0, variance));
-      const thresh = mean * (1 + k_sauvola * (std / R - 1));
-      const px = d[(y * w + x) * 4];
-      binarized[y * w + x] = px > thresh ? 255 : 0;
-    }
-  }
-  for (let i = 0; i < totalPx; i++) d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = binarized[i];
-
-  // 6. Morphological dilation — thicken thin/broken letter strokes
-  // 3x3 cross structuring element (not diagonal — preserves letterforms)
-  const dilated = new Uint8Array(totalPx);
-  for (let i = 0; i < totalPx; i++) dilated[i] = binarized[i];
+  // 5. Salt-and-pepper noise removal (median filter on dark outliers only)
+  //    Only replace isolated dark specks — preserves text detail
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
-      if (binarized[y * w + x] === 0) continue; // already black stays
-      // If any of the 4 cardinal neighbours is black, dilate (set black)
-      if (binarized[(y - 1) * w + x] === 0 || binarized[(y + 1) * w + x] === 0 ||
-          binarized[y * w + (x - 1)] === 0 || binarized[y * w + (x + 1)] === 0) {
-        dilated[y * w + x] = 0;
-      }
-    }
-  }
-  for (let i = 0; i < totalPx; i++) d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = dilated[i];
-
-  // 7. Noise removal: kill isolated black pixels (salt & pepper)
-  const cleaned = new Uint8Array(totalPx);
-  for (let i = 0; i < totalPx; i++) cleaned[i] = dilated[i];
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      if (cleaned[y * w + x] === 0) {
-        let blackNeighbours = 0;
+      const idx = (y * w + x) * 4;
+      const px = d[idx];
+      if (px < 80) { // dark pixel — check if isolated
+        let darkNeighbours = 0;
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
           if (dy === 0 && dx === 0) continue;
-          if (cleaned[(y + dy) * w + (x + dx)] === 0) blackNeighbours++;
+          if (d[((y + dy) * w + (x + dx)) * 4] < 128) darkNeighbours++;
         }
-        if (blackNeighbours <= 1) {
-          const idx = (y * w + x) * 4;
-          d[idx] = d[idx + 1] = d[idx + 2] = 255;
+        if (darkNeighbours <= 1) {
+          // Isolated speck — replace with median of neighbours
+          const neighbours = [];
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            if (dy === 0 && dx === 0) continue;
+            neighbours.push(d[((y + dy) * w + (x + dx)) * 4]);
+          }
+          neighbours.sort((a, b) => a - b);
+          const med = neighbours[3]; // median of 8
+          d[idx] = d[idx + 1] = d[idx + 2] = med;
         }
       }
     }
@@ -459,7 +414,7 @@ function preprocessForOcr(sourceCanvas) {
 
   ctx.putImageData(imgData, 0, 0);
 
-  // 8. Border padding — Tesseract struggles when text touches edges
+  // 6. Border padding — Tesseract struggles when text touches edges
   const pad = 30;
   const padded = document.createElement("canvas");
   padded.width = w + pad * 2; padded.height = h + pad * 2;
