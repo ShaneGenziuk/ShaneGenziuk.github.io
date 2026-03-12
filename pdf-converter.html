@@ -46,6 +46,10 @@ body{min-height:100vh;background:#f4f5f7;color:#2d3436;font-family:'Inter',sans-
 .redact-toggle{display:flex;align-items:center;gap:14px;cursor:pointer;padding:18px 22px;border-radius:8px;border:1px solid #ddd;background:#fff;transition:all .25s;user-select:none;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .redact-toggle:hover{border-color:#e74c3c}
 .redact-toggle.on{border-color:#e74c3c;background:#fef5f4}
+#ocrQualityToggle:hover{border-color:#2980b9}
+#ocrQualityToggle.on{border-color:#2980b9;background:#eaf4fc}
+#ocrQualityToggle.on .toggle-track{background:#2980b9}
+#ocrQualityToggle .toggle-label.on{color:#2980b9}
 .toggle-track{width:44px;height:24px;border-radius:12px;background:#ccc;position:relative;transition:all .25s;flex-shrink:0}
 .toggle-track.on{background:#e74c3c}
 .toggle-knob{width:18px;height:18px;border-radius:9px;background:#fff;position:absolute;top:3px;left:3px;transition:all .25s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
@@ -163,6 +167,13 @@ body{min-height:100vh;background:#f4f5f7;color:#2d3436;font-family:'Inter',sans-
         </div>
         <span class="mono" style="font-size:12px;color:#e74c3c" id="activeCount"></span>
       </div>
+      <div class="redact-toggle" id="ocrQualityToggle">
+        <div class="toggle-track" id="ocrToggleTrack"><div class="toggle-knob" id="ocrToggleKnob"></div></div>
+        <div style="flex:1">
+          <p class="toggle-label" id="ocrToggleLabel">Best Quality OCR</p>
+          <p style="font-size:13px;color:#636e72;margin-top:2px">Uses larger AI model (~15 MB download) for degraded scans — slower but more accurate</p>
+        </div>
+      </div>
       <div id="redactPanel" class="hidden"></div>
       <div id="errorMsg" class="error-msg hidden"></div>
     </div>
@@ -201,6 +212,7 @@ const nlpReady = new Promise(resolve => {
 // OCR ENGINE — Tesseract.js (async load, app works without it)
 // ============================================================
 let tesseractWorker = null;
+let tesseractWorkerQuality = null; // tracks which quality the current worker uses
 let ocrAvailable = false;
 const ocrReady = new Promise(resolve => {
   const s = document.createElement("script");
@@ -213,30 +225,91 @@ const ocrReady = new Promise(resolve => {
   document.head.appendChild(s);
 });
 
-async function getOcrWorker() {
-  if (tesseractWorker) return tesseractWorker;
+async function getOcrWorker(quality) {
+  const q = quality || (state.ocrBestQuality ? "best" : "fast");
+  // If existing worker matches requested quality, reuse it
+  if (tesseractWorker && tesseractWorkerQuality === q) return tesseractWorker;
+  // Teardown old worker if quality changed
+  if (tesseractWorker) { await tesseractWorker.terminate(); tesseractWorker = null; }
+  const langPath = q === "best"
+    ? "https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main/"
+    : "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/";
   tesseractWorker = await Tesseract.createWorker("eng", 1, {
     workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js",
-    corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js"
+    corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js",
+    langPath
   });
+  tesseractWorkerQuality = q;
   // Tune Tesseract for scanned documents
   await tesseractWorker.setParameters({
-    tessedit_pageseg_mode: "6",      // PSM 6: assume single uniform block of text
     preserve_interword_spaces: "1",   // keep word spacing
   });
   return tesseractWorker;
 }
 
-// ── Image preprocessing pipeline for OCR quality ──
-// Steps: grayscale → contrast stretch → horizontal line removal →
-//        unsharp mask sharpen → Sauvola adaptive threshold →
-//        morphological dilate → noise removal
-function preprocessForOcr(sourceCanvas) {
+// ── Deskew: detect and correct rotation via projection profile ──
+function deskewCanvas(sourceCanvas) {
   const w = sourceCanvas.width, h = sourceCanvas.height;
+  const ctx = sourceCanvas.getContext("2d");
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  // Quick grayscale + threshold for angle detection
+  const bw = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const g = 0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2];
+    bw[i] = g < 128 ? 1 : 0;
+  }
+  // Test angles from -3 to +3 degrees in 0.25 degree steps
+  let bestAngle = 0, bestScore = 0;
+  for (let deg = -3; deg <= 3; deg += 0.25) {
+    const rad = deg * Math.PI / 180;
+    const sinA = Math.sin(rad), cosA = Math.cos(rad);
+    const cx = w / 2, cy = h / 2;
+    // Project rotated pixels onto horizontal rows, measure variance of row sums
+    const rowSums = new Float32Array(h);
+    // Sample every 3rd pixel for speed
+    for (let y = 0; y < h; y += 1) {
+      let sum = 0;
+      for (let x = 0; x < w; x += 3) {
+        const rx = Math.round(cosA * (x - cx) - sinA * (y - cy) + cx);
+        const ry = Math.round(sinA * (x - cx) + cosA * (y - cy) + cy);
+        if (rx >= 0 && rx < w && ry >= 0 && ry < h && bw[ry * w + rx]) sum++;
+      }
+      rowSums[y] = sum;
+    }
+    // Score = sum of squared differences between adjacent rows (peaks when lines are horizontal)
+    let score = 0;
+    for (let y = 1; y < h; y++) {
+      const diff = rowSums[y] - rowSums[y - 1];
+      score += diff * diff;
+    }
+    if (score > bestScore) { bestScore = score; bestAngle = deg; }
+  }
+  // Only rotate if skew is meaningful (>0.2 degrees)
+  if (Math.abs(bestAngle) < 0.2) return sourceCanvas;
+  const out = document.createElement("canvas");
+  out.width = w; out.height = h;
+  const outCtx = out.getContext("2d");
+  outCtx.fillStyle = "#fff";
+  outCtx.fillRect(0, 0, w, h);
+  outCtx.translate(w / 2, h / 2);
+  outCtx.rotate(-bestAngle * Math.PI / 180);
+  outCtx.drawImage(sourceCanvas, -w / 2, -h / 2);
+  return out;
+}
+
+// ── Image preprocessing pipeline for OCR quality ──
+// Steps: deskew → grayscale → contrast stretch → horizontal line removal →
+//        unsharp mask sharpen → Sauvola adaptive threshold →
+//        morphological dilate → noise removal → border padding
+function preprocessForOcr(sourceCanvas) {
+  // 0. Deskew — correct rotation before any other processing
+  const deskewed = deskewCanvas(sourceCanvas);
+  const w = deskewed.width, h = deskewed.height;
   const out = document.createElement("canvas");
   out.width = w; out.height = h;
   const ctx = out.getContext("2d");
-  ctx.drawImage(sourceCanvas, 0, 0);
+  ctx.drawImage(deskewed, 0, 0);
   const imgData = ctx.getImageData(0, 0, w, h);
   const d = imgData.data;
   const totalPx = w * h;
@@ -385,13 +458,75 @@ function preprocessForOcr(sourceCanvas) {
   }
 
   ctx.putImageData(imgData, 0, 0);
-  return out;
+
+  // 8. Border padding — Tesseract struggles when text touches edges
+  const pad = 30;
+  const padded = document.createElement("canvas");
+  padded.width = w + pad * 2; padded.height = h + pad * 2;
+  const padCtx = padded.getContext("2d");
+  padCtx.fillStyle = "#fff";
+  padCtx.fillRect(0, 0, padded.width, padded.height);
+  padCtx.drawImage(out, pad, pad);
+  return padded;
+}
+
+// ── Detect best PSM for a page by analyzing pixel distribution ──
+function detectBestPSM(canvas) {
+  const w = canvas.width, h = canvas.height;
+  const ctx = canvas.getContext("2d");
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  // Divide page into vertical thirds and count dark pixels in each
+  const thirdW = Math.floor(w / 3);
+  const thirds = [0, 0, 0];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const g = 0.299 * d[(y*w+x)*4] + 0.587 * d[(y*w+x)*4+1] + 0.114 * d[(y*w+x)*4+2];
+      if (g < 128) thirds[Math.min(Math.floor(x / thirdW), 2)]++;
+    }
+  }
+  const total = thirds[0] + thirds[1] + thirds[2];
+  if (total === 0) return "6"; // fallback
+  const ratios = thirds.map(t => t / total);
+  // If left and right thirds each have >25% of ink, likely multi-column → PSM 3 (auto)
+  if (ratios[0] > 0.25 && ratios[2] > 0.25 && ratios[1] < 0.2) return "3";
+  // Otherwise single block → PSM 6
+  return "6";
+}
+
+// ── Average word confidence from Tesseract result ──
+function avgConfidence(data) {
+  const words = (data.words || []).filter(w => w.text.trim().length > 0);
+  if (words.length === 0) return 0;
+  return words.reduce((sum, w) => sum + w.confidence, 0) / words.length;
 }
 
 async function ocrFromCanvas(canvas) {
-  const worker = await getOcrWorker();
   const cleaned = preprocessForOcr(canvas);
+  const psm = detectBestPSM(canvas);
+
+  // First pass with user's selected quality
+  const worker = await getOcrWorker();
+  await worker.setParameters({ tessedit_pageseg_mode: psm });
   const { data } = await worker.recognize(cleaned);
+  const conf = avgConfidence(data);
+
+  // If confidence is low and we're not already on best, retry with tessdata_best
+  if (conf < 60 && tesseractWorkerQuality !== "best") {
+    const prevQuality = tesseractWorkerQuality;
+    const bestWorker = await getOcrWorker("best");
+    await bestWorker.setParameters({ tessedit_pageseg_mode: psm });
+    const retry = await bestWorker.recognize(cleaned);
+    const retryConf = avgConfidence(retry.data);
+    // Use whichever result has higher confidence
+    if (retryConf > conf) {
+      // Keep best worker active for remaining pages (likely same quality issue)
+      return retry.data.text || "";
+    }
+    // Fast was actually fine — switch back
+    await getOcrWorker(prevQuality);
+  }
+
   return data.text || "";
 }
 
@@ -516,7 +651,7 @@ const REDACTION_GROUPS = [
 // STATE
 // ============================================================
 const state = {
-  file: null, fileData: null, redactEnabled: false,
+  file: null, fileData: null, redactEnabled: false, ocrBestQuality: false,
   redactState: {}, customKeywords: "", result: null, exportFormat: "xlsx"
 };
 REDACTION_GROUPS.forEach(g => g.items.forEach(item => { state.redactState[item.id] = item.on; }));
@@ -546,6 +681,20 @@ function handleFile(f) {
   const reader = new FileReader();
   reader.onload = () => { state.fileData = reader.result; };
   reader.readAsArrayBuffer(f);
+}
+
+// ============================================================
+// OCR QUALITY TOGGLE
+// ============================================================
+const ocrQualityToggle = $("#ocrQualityToggle");
+ocrQualityToggle.addEventListener("click", () => { state.ocrBestQuality = !state.ocrBestQuality; renderOcrToggle(); });
+
+function renderOcrToggle() {
+  const on = state.ocrBestQuality;
+  ocrQualityToggle.classList.toggle("on", on);
+  $("#ocrToggleTrack").classList.toggle("on", on);
+  $("#ocrToggleKnob").classList.toggle("on", on);
+  $("#ocrToggleLabel").classList.toggle("on", on);
 }
 
 // ============================================================
