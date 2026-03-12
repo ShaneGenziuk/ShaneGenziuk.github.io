@@ -564,72 +564,59 @@ function filterNoiseBlobs(sourceCanvas) {
     bw[i] = g < 128 ? 1 : 0;
   }
 
-  // Label connected components using flood fill
-  const labels = new Int32Array(totalPx); // 0 = unlabeled
-  let nextLabel = 1;
-  const blobSizes = [0]; // index 0 unused, blobSizes[label] = pixel count
-  const blobBounds = [null]; // blobBounds[label] = {x1,y1,x2,y2}
+  // Label connected components using flood fill, storing pixel indices per blob
+  const visited = new Uint8Array(totalPx);
+  const blobs = []; // each entry: { pixels: [idx, ...], x1, y1, x2, y2 }
 
   const queue = [];
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const idx = y * w + x;
-      if (bw[idx] === 0 || labels[idx] !== 0) continue;
-      // BFS flood fill
-      const label = nextLabel++;
-      let size = 0, bx1 = x, by1 = y, bx2 = x, by2 = y;
+      if (bw[idx] === 0 || visited[idx]) continue;
+      // BFS flood fill — collect all pixel indices for this blob
+      const pixels = [];
+      let bx1 = x, by1 = y, bx2 = x, by2 = y;
       queue.push(idx);
-      labels[idx] = label;
+      visited[idx] = 1;
       while (queue.length > 0) {
         const ci = queue.pop();
-        size++;
+        pixels.push(ci);
         const cx = ci % w, cy = (ci - cx) / w;
         if (cx < bx1) bx1 = cx; if (cx > bx2) bx2 = cx;
         if (cy < by1) by1 = cy; if (cy > by2) by2 = cy;
         // 4-connected neighbours
         const neighbours = [ci - 1, ci + 1, ci - w, ci + w];
         for (const ni of neighbours) {
-          if (ni >= 0 && ni < totalPx && bw[ni] === 1 && labels[ni] === 0) {
-            // Check we don't wrap across rows for left/right neighbours
+          if (ni >= 0 && ni < totalPx && bw[ni] === 1 && !visited[ni]) {
             const nx = ni % w;
             if (ni === ci - 1 && nx === w - 1) continue;
             if (ni === ci + 1 && nx === 0) continue;
-            labels[ni] = label;
+            visited[ni] = 1;
             queue.push(ni);
           }
         }
       }
-      blobSizes.push(size);
-      blobBounds.push({ x1: bx1, y1: by1, x2: bx2, y2: by2 });
+      blobs.push({ pixels, x1: bx1, y1: by1, x2: bx2, y2: by2 });
     }
   }
 
-  // Determine size thresholds for noise.
-  // Typical character at 300+ DPI: ~20-2000 pixels.
-  // At 4x PDF scale, a character might be 50-5000px.
-  // Very small blobs (<15px) are almost certainly noise specks.
-  // We also check aspect ratio — very extreme aspect ratios (thin lines) are noise.
+  // Erase noise blobs — too small (specks), too large (stains), or thin lines
   const minBlobPx = 15;
-  const maxBlobPx = totalPx * 0.05; // blobs >5% of image are stains/shadows
+  const maxBlobPx = totalPx * 0.05;
 
-  for (let label = 1; label < nextLabel; label++) {
-    const size = blobSizes[label];
-    const b = blobBounds[label];
-    const bw2 = b.x2 - b.x1 + 1, bh = b.y2 - b.y1 + 1;
+  for (const blob of blobs) {
+    const size = blob.pixels.length;
+    const bw2 = blob.x2 - blob.x1 + 1, bh = blob.y2 - blob.y1 + 1;
 
     let isNoise = false;
     if (size < minBlobPx) isNoise = true;
     if (size > maxBlobPx) isNoise = true;
-    // Very thin horizontal or vertical line spanning a large distance — likely artifact
     if (bw2 > w * 0.3 && bh < 4) isNoise = true;
     if (bh > h * 0.3 && bw2 < 4) isNoise = true;
 
     if (isNoise) {
-      // Erase this blob — set to white
-      for (let i = 0; i < totalPx; i++) {
-        if (labels[i] === label) {
-          d[i*4] = d[i*4+1] = d[i*4+2] = 255;
-        }
+      for (const i of blob.pixels) {
+        d[i*4] = d[i*4+1] = d[i*4+2] = 255;
       }
     }
   }
