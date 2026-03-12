@@ -413,16 +413,7 @@ function preprocessForOcr(sourceCanvas) {
   }
 
   ctx.putImageData(imgData, 0, 0);
-
-  // 6. Border padding — Tesseract struggles when text touches edges
-  const pad = 30;
-  const padded = document.createElement("canvas");
-  padded.width = w + pad * 2; padded.height = h + pad * 2;
-  const padCtx = padded.getContext("2d");
-  padCtx.fillStyle = "#fff";
-  padCtx.fillRect(0, 0, padded.width, padded.height);
-  padCtx.drawImage(out, pad, pad);
-  return padded;
+  return padCanvas(out);
 }
 
 // ── Detect best PSM for a page by analyzing pixel distribution ──
@@ -456,33 +447,52 @@ function avgConfidence(data) {
   return words.reduce((sum, w) => sum + w.confidence, 0) / words.length;
 }
 
-async function ocrFromCanvas(canvas) {
-  const cleaned = preprocessForOcr(canvas);
-  const psm = detectBestPSM(canvas);
+// ── Add border padding to a canvas (no other processing) ──
+function padCanvas(sourceCanvas) {
+  const pad = 30;
+  const padded = document.createElement("canvas");
+  padded.width = sourceCanvas.width + pad * 2;
+  padded.height = sourceCanvas.height + pad * 2;
+  const ctx = padded.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, padded.width, padded.height);
+  ctx.drawImage(sourceCanvas, pad, pad);
+  return padded;
+}
 
-  // First pass with user's selected quality
+async function ocrFromCanvas(canvas) {
+  const psm = detectBestPSM(canvas);
   const worker = await getOcrWorker();
   await worker.setParameters({ tessedit_pageseg_mode: psm });
-  const { data } = await worker.recognize(cleaned);
-  const conf = avgConfidence(data);
 
-  // If confidence is low and we're not already on best, retry with tessdata_best
-  if (conf < 60 && tesseractWorkerQuality !== "best") {
+  // Path A: raw image (just padded) — best for clean/typewritten scans
+  const raw = padCanvas(canvas);
+  const rawResult = await worker.recognize(raw);
+  const rawConf = avgConfidence(rawResult.data);
+
+  // Path B: preprocessed image — helps with degraded/noisy scans
+  const cleaned = preprocessForOcr(canvas);
+  const cleanResult = await worker.recognize(cleaned);
+  const cleanConf = avgConfidence(cleanResult.data);
+
+  // Pick the higher-confidence result
+  let bestData = rawConf >= cleanConf ? rawResult.data : cleanResult.data;
+  let bestConf = Math.max(rawConf, cleanConf);
+
+  // If still low confidence and not on best model, retry with tessdata_best
+  if (bestConf < 60 && tesseractWorkerQuality !== "best") {
     const prevQuality = tesseractWorkerQuality;
     const bestWorker = await getOcrWorker("best");
     await bestWorker.setParameters({ tessedit_pageseg_mode: psm });
-    const retry = await bestWorker.recognize(cleaned);
+    // Retry with the image variant that scored higher
+    const retryImg = rawConf >= cleanConf ? raw : cleaned;
+    const retry = await bestWorker.recognize(retryImg);
     const retryConf = avgConfidence(retry.data);
-    // Use whichever result has higher confidence
-    if (retryConf > conf) {
-      // Keep best worker active for remaining pages (likely same quality issue)
-      return retry.data.text || "";
-    }
-    // Fast was actually fine — switch back
+    if (retryConf > bestConf) return retry.data.text || "";
     await getOcrWorker(prevQuality);
   }
 
-  return data.text || "";
+  return bestData.text || "";
 }
 
 
