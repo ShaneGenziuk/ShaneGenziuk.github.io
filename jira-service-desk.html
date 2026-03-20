@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jira Service Desk — Claude Cowork</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Crimson+Pro:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f14;--surface:#151820;--surface2:#1c2030;--border:#2a2e40;
+  --text:#e0e4f0;--text2:#8890a8;--accent:#7c6bf0;--accent2:#5b8cf0;
+  --green:#4cd080;--red:#f06060;--yellow:#f0c040;--orange:#f09040;
+}
+body{font-family:'Crimson Pro',Georgia,serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.5}
+code,pre,.mono{font-family:'JetBrains Mono',monospace}
+a{color:var(--accent2);text-decoration:none}a:hover{text-decoration:underline}
+
+/* Layout */
+.app{max-width:1200px;margin:0 auto;padding:24px}
+header{display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+header h1{font-size:1.5rem;font-weight:600;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+header .badge{font-size:.7rem;padding:2px 8px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-family:'JetBrains Mono',monospace}
+
+/* Connection panel */
+.conn-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+.conn-panel h2{font-size:1rem;margin-bottom:12px;color:var(--text2)}
+.conn-grid{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end}
+@media(max-width:800px){.conn-grid{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:.75rem;color:var(--text2);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em}
+.field input,.field select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:.9rem;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.field input::placeholder{color:var(--text2);opacity:.5}
+
+/* Buttons */
+.btn{padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:.8rem;cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn:hover{border-color:var(--accent);background:var(--surface)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{opacity:.9}
+.btn-sm{padding:4px 10px;font-size:.7rem}
+.btn-green{background:var(--green);border-color:var(--green);color:#000}
+.btn-green:hover{opacity:.85}
+
+/* Status bar */
+.status-bar{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:.8rem;font-family:'JetBrains Mono',monospace}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-dot.ok{background:var(--green)}
+.status-dot.err{background:var(--red)}
+.status-dot.warn{background:var(--yellow)}
+.status-dot.loading{background:var(--orange);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Filters */
+.filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.search-box{flex:1;min-width:200px}
+.search-box input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px 8px 32px;color:var(--text);font-size:.85rem;font-family:'JetBrains Mono',monospace;outline:none}
+.search-box{position:relative}
+.search-box::before{content:"⌕";position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:1rem}
+.filter-chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:4px 12px;border-radius:16px;font-size:.7rem;font-family:'JetBrains Mono',monospace;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;transition:all .2s}
+.chip.active{border-color:var(--accent);color:var(--accent);background:rgba(124,107,240,.1)}
+.chip:hover{border-color:var(--accent)}
+
+/* Ticket table */
+.tickets-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.tickets-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.tickets-header h2{font-size:1rem}
+.ticket-count{font-size:.75rem;color:var(--text2);font-family:'JetBrains Mono',monospace}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:10px 16px;font-size:.7rem;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);border-bottom:1px solid var(--border);background:var(--surface2)}
+td{padding:10px 16px;border-bottom:1px solid var(--border);font-size:.85rem;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+.key-link{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:.8rem;color:var(--accent2)}
+.priority-badge{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.priority-badge.highest,.priority-badge.critical{background:var(--red)}
+.priority-badge.high{background:var(--orange)}
+.priority-badge.medium{background:var(--yellow)}
+.priority-badge.low{background:var(--green)}
+.priority-badge.lowest{background:var(--text2)}
+.status-pill{display:inline-block;padding:2px 10px;border-radius:12px;font-size:.7rem;font-family:'JetBrains Mono',monospace;text-transform:uppercase}
+.status-pill.open,.status-pill.new{background:rgba(91,140,240,.15);color:var(--accent2)}
+.status-pill.in-progress,.status-pill.working{background:rgba(240,192,64,.15);color:var(--yellow)}
+.status-pill.resolved,.status-pill.done,.status-pill.closed{background:rgba(76,208,128,.15);color:var(--green)}
+.status-pill.waiting{background:rgba(240,144,64,.15);color:var(--orange)}
+.avatar{width:24px;height:24px;border-radius:50%;background:var(--surface2);display:inline-flex;align-items:center;justify-content:center;font-size:.6rem;font-family:'JetBrains Mono',monospace;color:var(--text2);border:1px solid var(--border)}
+
+/* Cowork button */
+.cowork-cell{text-align:right}
+
+/* Pagination */
+.pagination{display:flex;justify-content:center;gap:6px;padding:16px}
+
+/* Empty state */
+.empty{text-align:center;padding:60px 20px;color:var(--text2)}
+.empty .icon{font-size:2rem;margin-bottom:12px;opacity:.5}
+.empty p{font-size:.9rem}
+
+/* Loading */
+.loading-spinner{display:flex;align-items:center;justify-content:center;padding:40px;gap:8px;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:.8rem}
+.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Queue selector */
+.queue-bar{display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap}
+.queue-bar label{font-size:.75rem;color:var(--text2);font-family:'JetBrains Mono',monospace;text-transform:uppercase}
+.queue-bar select{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:.8rem;outline:none}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.visible{opacity:1;pointer-events:all}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:560px;width:90%;max-height:80vh;overflow-y:auto}
+.modal h3{margin-bottom:16px;font-size:1.1rem}
+.modal .detail-row{display:flex;gap:12px;margin-bottom:10px;font-size:.85rem}
+.modal .detail-label{min-width:100px;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:.75rem;text-transform:uppercase}
+.modal .detail-value{flex:1}
+.modal .description{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin:16px 0;font-size:.85rem;white-space:pre-wrap;max-height:200px;overflow-y:auto}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+
+/* Saved connections */
+.saved-conns{margin-top:12px;display:flex;gap:6px;flex-wrap:wrap}
+.saved-conn{display:flex;align-items:center;gap:6px}
+.saved-conn .btn{position:relative}
+.remove-conn{font-size:.65rem;cursor:pointer;color:var(--text2);margin-left:-4px}
+.remove-conn:hover{color:var(--red)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Jira Service Desk</h1>
+    <span class="badge">Claude Cowork</span>
+    <span class="badge">On-Prem</span>
+  </header>
+
+  <!-- Connection Panel -->
+  <div class="conn-panel">
+    <h2>Server Connection</h2>
+    <div class="conn-grid">
+      <div class="field">
+        <label>Jira Server URL</label>
+        <input id="jiraUrl" type="text" placeholder="https://jira.company.com" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Username / Email</label>
+        <input id="jiraUser" type="text" placeholder="user@company.com" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>API Token / Password</label>
+        <input id="jiraToken" type="password" placeholder="API token or password">
+      </div>
+      <div>
+        <button class="btn btn-primary" id="connectBtn" onclick="connect()">Connect</button>
+      </div>
+    </div>
+    <div class="saved-conns" id="savedConns"></div>
+    <div class="status-bar" id="statusBar" style="display:none">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText"></span>
+    </div>
+  </div>
+
+  <!-- Queue / Project Selection -->
+  <div class="queue-bar" id="queueBar" style="display:none">
+    <label>Service Desk</label>
+    <select id="deskSelect" onchange="loadQueues()"></select>
+    <label>Queue</label>
+    <select id="queueSelect" onchange="loadTickets()">
+      <option value="">All Issues (JQL)</option>
+    </select>
+    <label>Project</label>
+    <select id="projectSelect" onchange="loadTickets()">
+      <option value="">—</option>
+    </select>
+    <button class="btn btn-sm" onclick="loadTickets()">Refresh</button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters" id="filtersBar" style="display:none">
+    <div class="search-box">
+      <input id="searchInput" type="text" placeholder="Search tickets..." oninput="applyFilters()">
+    </div>
+    <div class="filter-chips" id="statusChips"></div>
+  </div>
+
+  <!-- Tickets -->
+  <div class="tickets-card" id="ticketsCard" style="display:none">
+    <div class="tickets-header">
+      <h2>Tickets</h2>
+      <span class="ticket-count" id="ticketCount"></span>
+    </div>
+    <div id="ticketsBody"></div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+  <!-- Empty state before connect -->
+  <div class="empty" id="emptyState">
+    <div class="icon">⟁</div>
+    <p>Enter your on-prem Jira server details above to browse Service Desk tickets</p>
+    <p style="font-size:.75rem;margin-top:8px;color:var(--text2)">Credentials are stored in your browser's localStorage only</p>
+  </div>
+</div>
+
+<!-- Ticket Detail Modal -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script type="module">
+const PAGE_SIZE = 25;
+
+const state = {
+  url: '', user: '', token: '',
+  connected: false,
+  desks: [],
+  queues: [],
+  projects: [],
+  tickets: [],
+  filtered: [],
+  page: 0,
+  statusFilter: null,
+  searchTerm: '',
+  allStatuses: [],
+};
+
+// --- Persistence ---
+function saveConnection() {
+  const conns = JSON.parse(localStorage.getItem('jsd_connections') || '[]');
+  const entry = { url: state.url, user: state.user, token: btoa(state.token) };
+  const idx = conns.findIndex(c => c.url === state.url && c.user === state.user);
+  if (idx >= 0) conns[idx] = entry; else conns.push(entry);
+  localStorage.setItem('jsd_connections', JSON.stringify(conns));
+  renderSavedConnections();
+}
+
+function renderSavedConnections() {
+  const conns = JSON.parse(localStorage.getItem('jsd_connections') || '[]');
+  const el = document.getElementById('savedConns');
+  if (!conns.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<span style="font-size:.7rem;color:var(--text2);font-family:JetBrains Mono,monospace">Saved:</span>' +
+    conns.map((c, i) => `<span class="saved-conn">
+      <button class="btn btn-sm" onclick="useSaved(${i})">${new URL(c.url).hostname}</button>
+      <span class="remove-conn" onclick="removeSaved(${i})">✕</span>
+    </span>`).join('');
+}
+
+window.useSaved = function(i) {
+  const conns = JSON.parse(localStorage.getItem('jsd_connections') || '[]');
+  const c = conns[i];
+  if (!c) return;
+  document.getElementById('jiraUrl').value = c.url;
+  document.getElementById('jiraUser').value = c.user;
+  document.getElementById('jiraToken').value = atob(c.token);
+  connect();
+};
+
+window.removeSaved = function(i) {
+  const conns = JSON.parse(localStorage.getItem('jsd_connections') || '[]');
+  conns.splice(i, 1);
+  localStorage.setItem('jsd_connections', JSON.stringify(conns));
+  renderSavedConnections();
+};
+
+// --- API ---
+function apiHeaders() {
+  return {
+    'Authorization': 'Basic ' + btoa(state.user + ':' + state.token),
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
+}
+
+async function apiFetch(path, opts = {}) {
+  const base = state.url.replace(/\/+$/, '');
+  const url = base + path;
+  const res = await fetch(url, {
+    ...opts,
+    headers: { ...apiHeaders(), ...(opts.headers || {}) },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+// --- Connection ---
+window.connect = async function() {
+  state.url = document.getElementById('jiraUrl').value.trim();
+  state.user = document.getElementById('jiraUser').value.trim();
+  state.token = document.getElementById('jiraToken').value.trim();
+
+  if (!state.url || !state.user || !state.token) {
+    setStatus('err', 'All fields required');
+    return;
+  }
+
+  setStatus('loading', 'Connecting...');
+  try {
+    // Test connection with server info
+    const info = await apiFetch('/rest/api/2/serverInfo');
+    setStatus('ok', `Connected to ${info.serverTitle || info.baseUrl} (v${info.version})`);
+    state.connected = true;
+    saveConnection();
+
+    // Load service desks, projects in parallel
+    const [desksResult, projectsResult] = await Promise.allSettled([
+      apiFetch('/rest/servicedeskapi/servicedesk').catch(() => ({ values: [] })),
+      apiFetch('/rest/api/2/project'),
+    ]);
+
+    state.desks = desksResult.status === 'fulfilled' ? (desksResult.value.values || []) : [];
+    state.projects = projectsResult.status === 'fulfilled' ? (Array.isArray(projectsResult.value) ? projectsResult.value : []) : [];
+
+    renderDeskSelect();
+    renderProjectSelect();
+    showTicketUI();
+
+    // Load initial tickets
+    await loadQueues();
+    await loadTickets();
+  } catch (e) {
+    state.connected = false;
+    setStatus('err', `Connection failed: ${e.message}`);
+  }
+};
+
+function setStatus(type, msg) {
+  const bar = document.getElementById('statusBar');
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  bar.style.display = 'flex';
+  dot.className = 'status-dot ' + type;
+  txt.textContent = msg;
+}
+
+function showTicketUI() {
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('queueBar').style.display = 'flex';
+  document.getElementById('filtersBar').style.display = 'flex';
+  document.getElementById('ticketsCard').style.display = 'block';
+}
+
+// --- Dropdowns ---
+function renderDeskSelect() {
+  const sel = document.getElementById('deskSelect');
+  sel.innerHTML = '<option value="">—</option>' +
+    state.desks.map(d => `<option value="${d.id}">${d.projectName || d.id}</option>`).join('');
+}
+
+function renderProjectSelect() {
+  const sel = document.getElementById('projectSelect');
+  sel.innerHTML = '<option value="">—</option>' +
+    state.projects.map(p => `<option value="${p.key}">${p.key} — ${p.name}</option>`).join('');
+}
+
+window.loadQueues = async function() {
+  const deskId = document.getElementById('deskSelect').value;
+  const sel = document.getElementById('queueSelect');
+  sel.innerHTML = '<option value="">All Issues (JQL)</option>';
+  if (!deskId) return;
+  try {
+    const data = await apiFetch(`/rest/servicedeskapi/servicedesk/${deskId}/queue`);
+    state.queues = data.values || [];
+    sel.innerHTML = '<option value="">All Issues (JQL)</option>' +
+      state.queues.map(q => `<option value="${q.id}">${q.name} (${q.issueCount ?? '?'})</option>`).join('');
+  } catch (e) {
+    console.warn('Could not load queues:', e);
+  }
+};
+
+// --- Load Tickets ---
+window.loadTickets = async function() {
+  const deskId = document.getElementById('deskSelect').value;
+  const queueId = document.getElementById('queueSelect').value;
+  const projectKey = document.getElementById('projectSelect').value;
+
+  document.getElementById('ticketsBody').innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading tickets...</div>';
+
+  try {
+    let issues = [];
+    let total = 0;
+
+    if (deskId && queueId) {
+      // Load from specific queue
+      const data = await apiFetch(`/rest/servicedeskapi/servicedesk/${deskId}/queue/${queueId}/issue?start=${state.page * PAGE_SIZE}&limit=${PAGE_SIZE}`);
+      issues = data.values || [];
+      total = data.size || issues.length;
+    } else {
+      // Use JQL search
+      let jql = 'ORDER BY updated DESC';
+      if (projectKey) {
+        jql = `project = "${projectKey}" ORDER BY updated DESC`;
+      } else if (deskId) {
+        const desk = state.desks.find(d => String(d.id) === deskId);
+        if (desk && desk.projectKey) {
+          jql = `project = "${desk.projectKey}" ORDER BY updated DESC`;
+        }
+      }
+      const data = await apiFetch(`/rest/api/2/search?jql=${encodeURIComponent(jql)}&startAt=${state.page * PAGE_SIZE}&maxResults=${PAGE_SIZE}&fields=summary,status,priority,assignee,reporter,created,updated,issuetype,description`);
+      issues = data.issues || [];
+      total = data.total || issues.length;
+    }
+
+    state.tickets = normalizeIssues(issues);
+    state.allStatuses = [...new Set(state.tickets.map(t => t.status))].sort();
+    renderStatusChips();
+    applyFilters();
+
+    document.getElementById('ticketCount').textContent = `${total} total`;
+    renderPagination(total);
+  } catch (e) {
+    document.getElementById('ticketsBody').innerHTML = `<div class="empty"><p style="color:var(--red)">Error loading tickets: ${escHtml(e.message)}</p></div>`;
+  }
+};
+
+function normalizeIssues(issues) {
+  return issues.map(issue => {
+    const f = issue.fields || {};
+    return {
+      key: issue.key,
+      id: issue.id,
+      summary: f.summary || '(no summary)',
+      status: f.status?.name || 'Unknown',
+      statusCategory: f.status?.statusCategory?.key || '',
+      priority: f.priority?.name || 'Medium',
+      assignee: f.assignee?.displayName || f.assignee?.name || 'Unassigned',
+      assigneeInitials: getInitials(f.assignee?.displayName || f.assignee?.name || '?'),
+      reporter: f.reporter?.displayName || f.reporter?.name || '',
+      type: f.issuetype?.name || '',
+      created: f.created ? new Date(f.created).toLocaleDateString() : '',
+      updated: f.updated ? new Date(f.updated).toLocaleDateString() : '',
+      description: f.description || '',
+      self: issue.self || '',
+    };
+  });
+}
+
+function getInitials(name) {
+  return name.split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+// --- Filters ---
+function renderStatusChips() {
+  const el = document.getElementById('statusChips');
+  el.innerHTML = state.allStatuses.map(s =>
+    `<span class="chip ${state.statusFilter === s ? 'active' : ''}" onclick="toggleStatus('${escAttr(s)}')">${escHtml(s)}</span>`
+  ).join('');
+}
+
+window.toggleStatus = function(s) {
+  state.statusFilter = state.statusFilter === s ? null : s;
+  state.page = 0;
+  renderStatusChips();
+  applyFilters();
+};
+
+window.applyFilters = function() {
+  const term = document.getElementById('searchInput').value.toLowerCase();
+  state.searchTerm = term;
+  state.filtered = state.tickets.filter(t => {
+    if (state.statusFilter && t.status !== state.statusFilter) return false;
+    if (term && !t.key.toLowerCase().includes(term) && !t.summary.toLowerCase().includes(term) && !t.assignee.toLowerCase().includes(term)) return false;
+    return true;
+  });
+  renderTickets();
+};
+
+// --- Render ---
+function renderTickets() {
+  const body = document.getElementById('ticketsBody');
+  if (!state.filtered.length) {
+    body.innerHTML = '<div class="empty"><p>No tickets match your filters</p></div>';
+    return;
+  }
+  body.innerHTML = `<table>
+    <thead><tr>
+      <th>Key</th><th>Type</th><th>Summary</th><th>Status</th><th>Priority</th><th>Assignee</th><th>Updated</th><th></th>
+    </tr></thead>
+    <tbody>${state.filtered.map(t => `<tr>
+      <td><a class="key-link" href="#" onclick="showDetail('${escAttr(t.key)}');return false">${escHtml(t.key)}</a></td>
+      <td style="font-size:.8rem;color:var(--text2)">${escHtml(t.type)}</td>
+      <td>${escHtml(t.summary)}</td>
+      <td><span class="status-pill ${statusClass(t.status)}">${escHtml(t.status)}</span></td>
+      <td><span class="priority-badge ${t.priority.toLowerCase()}"></span>${escHtml(t.priority)}</td>
+      <td><span class="avatar">${escHtml(t.assigneeInitials)}</span> <span style="font-size:.8rem">${escHtml(t.assignee)}</span></td>
+      <td style="font-size:.8rem;color:var(--text2)">${t.updated}</td>
+      <td class="cowork-cell"><button class="btn btn-sm btn-green" onclick="launchCowork('${escAttr(t.key)}','${escAttr(t.summary.replace(/'/g,''))}')">Cowork</button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function statusClass(s) {
+  const l = s.toLowerCase();
+  if (['open', 'new', 'to do', 'created', 'reopened'].some(k => l.includes(k))) return 'open';
+  if (['progress', 'working', 'development', 'review'].some(k => l.includes(k))) return 'in-progress';
+  if (['done', 'closed', 'resolved', 'complete'].some(k => l.includes(k))) return 'resolved';
+  if (['waiting', 'pending', 'blocked', 'hold'].some(k => l.includes(k))) return 'waiting';
+  return 'open';
+}
+
+function renderPagination(total) {
+  const pages = Math.ceil(total / PAGE_SIZE);
+  if (pages <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
+  const btns = [];
+  for (let i = 0; i < pages && i < 10; i++) {
+    btns.push(`<button class="btn btn-sm ${i === state.page ? 'btn-primary' : ''}" onclick="goPage(${i})">${i + 1}</button>`);
+  }
+  document.getElementById('pagination').innerHTML = btns.join('');
+}
+
+window.goPage = function(p) {
+  state.page = p;
+  loadTickets();
+};
+
+// --- Detail Modal ---
+window.showDetail = async function(key) {
+  const t = state.tickets.find(t => t.key === key);
+  if (!t) return;
+  const jiraLink = state.url.replace(/\/+$/, '') + '/browse/' + t.key;
+  const coworkCmd = buildCoworkCommand(t.key, t.summary);
+
+  document.getElementById('modalContent').innerHTML = `
+    <h3>${escHtml(t.key)}: ${escHtml(t.summary)}</h3>
+    <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="status-pill ${statusClass(t.status)}">${escHtml(t.status)}</span></span></div>
+    <div class="detail-row"><span class="detail-label">Priority</span><span class="detail-value"><span class="priority-badge ${t.priority.toLowerCase()}"></span>${escHtml(t.priority)}</span></div>
+    <div class="detail-row"><span class="detail-label">Type</span><span class="detail-value">${escHtml(t.type)}</span></div>
+    <div class="detail-row"><span class="detail-label">Assignee</span><span class="detail-value">${escHtml(t.assignee)}</span></div>
+    <div class="detail-row"><span class="detail-label">Reporter</span><span class="detail-value">${escHtml(t.reporter)}</span></div>
+    <div class="detail-row"><span class="detail-label">Created</span><span class="detail-value">${t.created}</span></div>
+    <div class="detail-row"><span class="detail-label">Updated</span><span class="detail-value">${t.updated}</span></div>
+    <div class="detail-row"><span class="detail-label">Jira Link</span><span class="detail-value"><a href="${escAttr(jiraLink)}" target="_blank" rel="noopener">${escHtml(jiraLink)}</a></span></div>
+    ${t.description ? `<div class="description">${escHtml(t.description)}</div>` : ''}
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:12px">
+      <div style="font-size:.7rem;color:var(--text2);font-family:JetBrains Mono,monospace;margin-bottom:6px">CLAUDE COWORK COMMAND</div>
+      <code style="font-size:.8rem;word-break:break-all;color:var(--green)">${escHtml(coworkCmd)}</code>
+      <button class="btn btn-sm" style="margin-left:8px" onclick="copyCmd(this,'${escAttr(coworkCmd)}')">Copy</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Close</button>
+      <button class="btn btn-green" onclick="launchCowork('${escAttr(t.key)}','${escAttr(t.summary.replace(/'/g,''))}')">Launch Cowork</button>
+    </div>`;
+
+  document.getElementById('modal').classList.add('visible');
+};
+
+window.closeModal = function() {
+  document.getElementById('modal').classList.remove('visible');
+};
+
+window.copyCmd = function(btn, cmd) {
+  navigator.clipboard.writeText(cmd).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+};
+
+// --- Cowork Integration ---
+function buildCoworkCommand(key, summary) {
+  const jiraLink = state.url.replace(/\/+$/, '') + '/browse/' + key;
+  return `claude cowork "${key}: ${summary}" --context "${jiraLink}"`;
+}
+
+window.launchCowork = function(key, summary) {
+  const cmd = buildCoworkCommand(key, summary);
+  // Copy to clipboard for terminal use
+  navigator.clipboard.writeText(cmd).then(() => {
+    const note = document.createElement('div');
+    note.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--green);color:#000;padding:12px 20px;border-radius:8px;font-family:JetBrains Mono,monospace;font-size:.8rem;z-index:200;animation:fadeup .3s ease';
+    note.textContent = `Copied: ${cmd.slice(0, 60)}...`;
+    document.body.appendChild(note);
+    setTimeout(() => note.remove(), 3000);
+  }).catch(() => {
+    prompt('Copy this command to your terminal:', cmd);
+  });
+};
+
+// --- Helpers ---
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Init
+renderSavedConnections();
+
+// Handle Escape key for modal
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+</script>
+</body>
+</html>
