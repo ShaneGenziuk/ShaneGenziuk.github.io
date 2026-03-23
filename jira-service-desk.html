@@ -27,6 +27,11 @@ header .badge{font-size:.7rem;padding:2px 8px;border-radius:12px;background:var(
 .conn-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
 .conn-panel h2{font-size:1rem;margin-bottom:12px;color:var(--text2)}
 .conn-grid{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end}
+.conn-grid-proxy{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-top:10px}
+.proxy-toggle{font-size:.75rem;color:var(--accent2);cursor:pointer;font-family:'JetBrains Mono',monospace;margin-top:10px;display:inline-block}
+.proxy-toggle:hover{text-decoration:underline}
+.proxy-section{display:none;margin-top:6px}
+.proxy-section.visible{display:block}
 @media(max-width:800px){.conn-grid{grid-template-columns:1fr}}
 .field{display:flex;flex-direction:column;gap:4px}
 .field label{font-size:.75rem;color:var(--text2);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em}
@@ -155,6 +160,24 @@ tr:hover td{background:var(--surface2)}
         <button class="btn btn-primary" id="connectBtn" onclick="connect()">Connect</button>
       </div>
     </div>
+    <span class="proxy-toggle" onclick="document.getElementById('proxySection').classList.toggle('visible')">+ Proxy / Custom Header</span>
+    <div class="proxy-section" id="proxySection">
+      <div class="conn-grid-proxy">
+        <div class="field">
+          <label>Custom Header Name</label>
+          <input id="proxyHeaderName" type="text" placeholder="X-Proxy-Key" spellcheck="false">
+        </div>
+        <div class="field">
+          <label>Custom Header Value</label>
+          <input id="proxyHeaderValue" type="password" placeholder="your-proxy-api-key">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn btn-sm" onclick="addCustomHeader()">Add Header</button>
+        </div>
+      </div>
+      <div id="customHeadersList" style="margin-top:8px"></div>
+    </div>
     <div class="saved-conns" id="savedConns"></div>
     <div class="status-bar" id="statusBar" style="display:none">
       <span class="status-dot" id="statusDot"></span>
@@ -213,6 +236,7 @@ const PAGE_SIZE = 25;
 
 const state = {
   url: '', user: '', token: '',
+  customHeaders: [],  // [{name, value}]
   connected: false,
   desks: [],
   queues: [],
@@ -225,10 +249,37 @@ const state = {
   allStatuses: [],
 };
 
+// --- Custom Headers ---
+window.addCustomHeader = function() {
+  const nameEl = document.getElementById('proxyHeaderName');
+  const valEl = document.getElementById('proxyHeaderValue');
+  const name = nameEl.value.trim();
+  const value = valEl.value.trim();
+  if (!name || !value) return;
+  state.customHeaders = state.customHeaders.filter(h => h.name !== name);
+  state.customHeaders.push({ name, value });
+  nameEl.value = '';
+  valEl.value = '';
+  renderCustomHeaders();
+};
+
+window.removeCustomHeader = function(i) {
+  state.customHeaders.splice(i, 1);
+  renderCustomHeaders();
+};
+
+function renderCustomHeaders() {
+  const el = document.getElementById('customHeadersList');
+  if (!state.customHeaders.length) { el.innerHTML = ''; return; }
+  el.innerHTML = state.customHeaders.map((h, i) =>
+    `<span class="chip active" style="margin-right:4px">${escHtml(h.name)}: ${'•'.repeat(6)} <span class="remove-conn" onclick="removeCustomHeader(${i})">✕</span></span>`
+  ).join('');
+}
+
 // --- Persistence ---
 function saveConnection() {
   const conns = JSON.parse(localStorage.getItem('jsd_connections') || '[]');
-  const entry = { url: state.url, user: state.user, token: btoa(state.token) };
+  const entry = { url: state.url, user: state.user, token: btoa(state.token), customHeaders: state.customHeaders.map(h => ({ name: h.name, value: btoa(h.value) })) };
   const idx = conns.findIndex(c => c.url === state.url && c.user === state.user);
   if (idx >= 0) conns[idx] = entry; else conns.push(entry);
   localStorage.setItem('jsd_connections', JSON.stringify(conns));
@@ -241,7 +292,7 @@ function renderSavedConnections() {
   if (!conns.length) { el.innerHTML = ''; return; }
   el.innerHTML = '<span style="font-size:.7rem;color:var(--text2);font-family:JetBrains Mono,monospace">Saved:</span>' +
     conns.map((c, i) => `<span class="saved-conn">
-      <button class="btn btn-sm" onclick="useSaved(${i})">${new URL(c.url).hostname}</button>
+      <button class="btn btn-sm" onclick="useSaved(${i})">${new URL(c.url).hostname}${c.customHeaders?.length ? ' 🔑' : ''}</button>
       <span class="remove-conn" onclick="removeSaved(${i})">✕</span>
     </span>`).join('');
 }
@@ -253,6 +304,9 @@ window.useSaved = function(i) {
   document.getElementById('jiraUrl').value = c.url;
   document.getElementById('jiraUser').value = c.user;
   document.getElementById('jiraToken').value = atob(c.token);
+  state.customHeaders = (c.customHeaders || []).map(h => ({ name: h.name, value: atob(h.value) }));
+  renderCustomHeaders();
+  if (state.customHeaders.length) document.getElementById('proxySection').classList.add('visible');
   connect();
 };
 
@@ -265,11 +319,15 @@ window.removeSaved = function(i) {
 
 // --- API ---
 function apiHeaders() {
-  return {
+  const headers = {
     'Authorization': 'Basic ' + btoa(state.user + ':' + state.token),
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   };
+  for (const h of state.customHeaders) {
+    headers[h.name] = h.value;
+  }
+  return headers;
 }
 
 async function apiFetch(path, opts = {}) {
